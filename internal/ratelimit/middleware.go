@@ -1,0 +1,82 @@
+package ratelimit
+
+import (
+	"net/http"
+
+	"github.com/shengyanli1982/orbit"
+)
+
+// RateLimitMiddleware 限流中间件结构
+type RateLimitMiddleware struct {
+	ipLimiter       *IPLimiter
+	upstreamLimiter *UpstreamLimiter
+	enabled         bool
+}
+
+// NewRateLimitMiddleware 创建新的限流中间件实例
+func NewRateLimitMiddleware(ipPerSecond float64, ipBurst int, upstreamPerSecond float64, upstreamBurst int) *RateLimitMiddleware {
+	return &RateLimitMiddleware{
+		ipLimiter:       NewIPLimiter(ipPerSecond, ipBurst),
+		upstreamLimiter: NewUpstreamLimiter(upstreamPerSecond, upstreamBurst),
+		enabled:         true,
+	}
+}
+
+// Middleware 返回orbit中间件函数
+func (m *RateLimitMiddleware) Middleware() orbit.HandlerFunc {
+	return func(c *orbit.Context) {
+		if !m.enabled {
+			c.Next()
+			return
+		}
+
+		// IP级别限流检查
+		if !m.ipLimiter.Allow(c.Request) {
+			c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+				"error":   "rate limit exceeded",
+				"message": "too many requests from this IP",
+			})
+			c.Abort()
+			return
+		}
+
+		// 上游级别限流检查（如果有指定上游）
+		if upstream := c.GetString("upstream"); upstream != "" {
+			if !m.upstreamLimiter.Allow(upstream) {
+				c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+					"error":   "rate limit exceeded",
+					"message": "too many requests to this upstream",
+				})
+				c.Abort()
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+
+// Enable 启用限流
+func (m *RateLimitMiddleware) Enable() {
+	m.enabled = true
+}
+
+// Disable 禁用限流
+func (m *RateLimitMiddleware) Disable() {
+	m.enabled = false
+}
+
+// IsEnabled 检查是否启用限流
+func (m *RateLimitMiddleware) IsEnabled() bool {
+	return m.enabled
+}
+
+// ResetIP 重置指定IP的限流状态
+func (m *RateLimitMiddleware) ResetIP(ip string) {
+	m.ipLimiter.Reset(ip)
+}
+
+// ResetUpstream 重置指定上游的限流状态
+func (m *RateLimitMiddleware) ResetUpstream(upstream string) {
+	m.upstreamLimiter.Reset(upstream)
+}
