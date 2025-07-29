@@ -12,6 +12,7 @@ require (
 	github.com/shengyanli1982/gs v0.1.5
 	github.com/shengyanli1982/law v0.1.18
 	github.com/shengyanli1982/orbit v0.1.13
+	github.com/shengyanli1982/retry v0.1.9
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0

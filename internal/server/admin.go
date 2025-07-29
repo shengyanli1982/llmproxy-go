@@ -50,7 +50,7 @@ func NewAdminServer(debug bool, logger *logr.Logger, config *config.AdminConfig,
 
 	// 创建管理服务实例
 	svcs := NewAdminServices()
-	
+
 	// 初始化管理服务
 	svcs.Initialize(config, globalConfig, logger, server)
 

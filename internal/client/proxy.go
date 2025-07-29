@@ -3,6 +3,8 @@ package client
 import (
 	"net/http"
 	"net/url"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/config"
 )
 
 // ProxyHandler 代理处理器
@@ -12,7 +14,30 @@ type ProxyHandler struct {
 }
 
 // NewProxyHandler 创建新的代理处理器实例
-func NewProxyHandler(proxyURL string) *ProxyHandler {
+// 优先使用 proxyConfig 中的配置，如果没有设置则使用环境变量
+func NewProxyHandler(proxyConfig *config.ProxyConfig) *ProxyHandler {
+	// 如果没有提供代理配置或URL为空，则不启用代理
+	if proxyConfig == nil || proxyConfig.URL == "" {
+		return &ProxyHandler{
+			enabled: false,
+		}
+	}
+
+	parsedURL, err := url.Parse(proxyConfig.URL)
+	if err != nil {
+		return &ProxyHandler{
+			enabled: false,
+		}
+	}
+
+	return &ProxyHandler{
+		proxyURL: parsedURL,
+		enabled:  true,
+	}
+}
+
+// NewProxyHandlerFromURL 从URL字符串创建代理处理器实例（保持向后兼容）
+func NewProxyHandlerFromURL(proxyURL string) *ProxyHandler {
 	if proxyURL == "" {
 		return &ProxyHandler{
 			enabled: false,
@@ -33,6 +58,7 @@ func NewProxyHandler(proxyURL string) *ProxyHandler {
 }
 
 // GetProxyFunc 获取代理函数
+// 优先使用配置的代理，如果没有配置则使用环境变量
 func (p *ProxyHandler) GetProxyFunc() func(*http.Request) (*url.URL, error) {
 	if !p.enabled {
 		return http.ProxyFromEnvironment // 使用环境变量中的代理设置

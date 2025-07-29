@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,35 +22,41 @@ import (
 	"github.com/sony/gobreaker"
 )
 
+const (
+	// MaxRequestBodySize 定义请求体的最大大小（32MB）
+	// 防止过大的请求体导致内存耗尽
+	MaxRequestBodySize = 32 << 20 // 32MB
+)
+
 // ForwardService 代表转发服务，处理客户端请求转发逻辑
 type ForwardService struct {
-	mu               sync.RWMutex                    // 读写锁，保护并发访问
-	config           *config.ForwardConfig           // 转发服务配置
-	globalConfig     *config.Config                  // 全局配置
-	logger           *logr.Logger                    // 日志记录器
-	
+	mu           sync.RWMutex          // 读写锁，保护并发访问
+	config       *config.ForwardConfig // 转发服务配置
+	globalConfig *config.Config        // 全局配置
+	logger       *logr.Logger          // 日志记录器
+
 	// 功能模块
-	loadBalancer     balance.LoadBalancer            // 负载均衡器
-	httpClient       client.HTTPClient               // HTTP客户端
-	rateLimitMW      *ratelimit.RateLimitMiddleware  // 限流中间件
-	authFactory      auth.AuthenticatorFactory       // 认证工厂
-	headerOperator   headers.HeaderOperator          // 头部操作器
-	breakerFactory   breaker.CircuitBreakerFactory   // 熔断器工厂
-	
+	loadBalancer   balance.LoadBalancer           // 负载均衡器
+	httpClient     client.HTTPClient              // HTTP客户端
+	rateLimitMW    *ratelimit.RateLimitMiddleware // 限流中间件
+	authFactory    auth.AuthenticatorFactory      // 认证工厂
+	headerOperator headers.HeaderOperator         // 头部操作器
+	breakerFactory breaker.CircuitBreakerFactory  // 熔断器工厂
+
 	// 运行时数据
-	upstreams        []balance.Upstream              // 上游服务列表
-	upstreamMap      map[string]*config.UpstreamConfig // 上游配置映射
-	circuitBreakers  map[string]breaker.CircuitBreaker // 熔断器映射
-	
+	upstreams       []balance.Upstream                // 上游服务列表
+	upstreamMap     map[string]*config.UpstreamConfig // 上游配置映射
+	circuitBreakers map[string]breaker.CircuitBreaker // 熔断器映射
+
 	// 状态控制
-	running          bool                            // 运行状态
-	stopCh           chan struct{}                   // 停止信号
+	running bool          // 运行状态
+	stopCh  chan struct{} // 停止信号
 }
 
 // NewForwardServices 创建新的转发服务实例
 func NewForwardServices() *ForwardService {
 	logger := logr.Discard() // 临时使用，后续会被重新设置
-	
+
 	return &ForwardService{
 		logger:          &logger,
 		authFactory:     auth.NewFactory(),
@@ -65,11 +72,11 @@ func NewForwardServices() *ForwardService {
 func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *config.Config, logger *logr.Logger) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.config = cfg
 	s.globalConfig = globalConfig
 	s.logger = logger
-	
+
 	// 初始化限流中间件
 	if cfg.RateLimit != nil {
 		s.rateLimitMW = ratelimit.NewRateLimitMiddleware(
@@ -77,7 +84,7 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 			float64(cfg.RateLimit.PerSecond), cfg.RateLimit.Burst,
 		)
 	}
-	
+
 	// 查找默认上游组
 	var defaultGroup *config.UpstreamGroupConfig
 	for _, group := range globalConfig.UpstreamGroups {
@@ -86,31 +93,31 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 			break
 		}
 	}
-	
+
 	if defaultGroup == nil {
 		return fmt.Errorf("default upstream group '%s' not found", cfg.DefaultGroup)
 	}
-	
+
 	// 构建上游服务列表
 	if err := s.buildUpstreams(defaultGroup, globalConfig); err != nil {
 		return fmt.Errorf("failed to build upstreams: %w", err)
 	}
-	
+
 	// 创建负载均衡器
 	if err := s.createLoadBalancer(defaultGroup); err != nil {
 		return fmt.Errorf("failed to create load balancer: %w", err)
 	}
-	
+
 	// 创建HTTP客户端
 	if err := s.createHttpClient(defaultGroup); err != nil {
 		return fmt.Errorf("failed to create http client: %w", err)
 	}
-	
+
 	// 初始化熔断器
 	if err := s.initializeCircuitBreakers(); err != nil {
 		return fmt.Errorf("failed to initialize circuit breakers: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -120,50 +127,50 @@ func (s *ForwardService) buildUpstreams(group *config.UpstreamGroupConfig, globa
 	for i := range globalConfig.Upstreams {
 		upstreamConfigMap[globalConfig.Upstreams[i].Name] = &globalConfig.Upstreams[i]
 	}
-	
+
 	s.upstreams = make([]balance.Upstream, 0, len(group.Upstreams))
-	
+
 	for _, upstreamRef := range group.Upstreams {
 		upstreamConfig, exists := upstreamConfigMap[upstreamRef.Name]
 		if !exists {
 			return fmt.Errorf("upstream '%s' not found in configuration", upstreamRef.Name)
 		}
-		
+
 		weight := upstreamRef.Weight
 		if weight <= 0 {
 			weight = 1 // 默认权重
 		}
-		
+
 		upstream := balance.Upstream{
 			Name:   upstreamConfig.Name,
 			URL:    upstreamConfig.URL,
 			Weight: weight,
 			Config: upstreamConfig,
 		}
-		
+
 		s.upstreams = append(s.upstreams, upstream)
 		s.upstreamMap[upstreamConfig.Name] = upstreamConfig
 	}
-	
+
 	return nil
 }
 
 // createLoadBalancer 创建负载均衡器
 func (s *ForwardService) createLoadBalancer(group *config.UpstreamGroupConfig) error {
 	factory := balance.NewFactory()
-	
+
 	var balanceConfig *config.BalanceConfig
 	if group.Balance != nil {
 		balanceConfig = group.Balance
 	} else {
 		balanceConfig = &config.BalanceConfig{Strategy: "roundrobin"}
 	}
-	
+
 	lb, err := factory.Create(balanceConfig)
 	if err != nil {
 		return err
 	}
-	
+
 	s.loadBalancer = lb
 	return nil
 }
@@ -171,10 +178,10 @@ func (s *ForwardService) createLoadBalancer(group *config.UpstreamGroupConfig) e
 // createHttpClient 创建HTTP客户端
 func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) error {
 	factory := client.NewFactory()
-	
+
 	// 构建客户端配置
 	clientConfig := client.DefaultConfig()
-	
+
 	if group.HTTPClient != nil {
 		if group.HTTPClient.KeepAlive > 0 {
 			clientConfig.IdleConnTimeout = group.HTTPClient.KeepAlive
@@ -196,12 +203,12 @@ func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) err
 			clientConfig.ProxyURL = group.HTTPClient.Proxy.URL
 		}
 	}
-	
+
 	httpClient, err := factory.Create(clientConfig)
 	if err != nil {
 		return err
 	}
-	
+
 	s.httpClient = httpClient
 	return nil
 }
@@ -212,20 +219,20 @@ func (s *ForwardService) initializeCircuitBreakers() error {
 		if upstream.Config.Breaker != nil {
 			settings := breaker.CreateFromConfig(
 				upstream.Name,
-				3,  // maxRequests
-				10*time.Second, // interval  
+				3,              // maxRequests
+				10*time.Second, // interval
 				time.Duration(upstream.Config.Breaker.Cooldown)*time.Second, // timeout
-				upstream.Config.Breaker.Threshold, // failureThreshold
-				10, // minRequests
+				upstream.Config.Breaker.Threshold,                           // failureThreshold
+				10,                                                          // minRequests
 			)
-			
+
 			cb, err := s.breakerFactory.Create(upstream.Name, settings)
 			if err != nil {
 				return fmt.Errorf("failed to create circuit breaker for upstream '%s': %w", upstream.Name, err)
 			}
-			
+
 			s.circuitBreakers[upstream.Name] = cb
-			
+
 			// 如果负载均衡器支持熔断器，也要设置
 			if lbWithBreaker, ok := s.loadBalancer.(balance.LoadBalancerWithBreaker); ok {
 				if err := lbWithBreaker.CreateBreaker(upstream.Name, settings); err != nil {
@@ -234,7 +241,7 @@ func (s *ForwardService) initializeCircuitBreakers() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -245,7 +252,7 @@ func (s *ForwardService) RegisterGroup(g *gin.RouterGroup) {
 		// 将orbit中间件转换为gin中间件
 		g.Use(s.ginRateLimitMiddleware())
 	}
-	
+
 	// 注册转发处理器，处理所有请求
 	g.Any("/*path", s.handleForward)
 }
@@ -253,11 +260,29 @@ func (s *ForwardService) RegisterGroup(g *gin.RouterGroup) {
 // ginRateLimitMiddleware 将orbit限流中间件转换为gin中间件
 func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 简单的IP限流检查
-		if s.rateLimitMW != nil && s.rateLimitMW.IsEnabled() {
-			// 这里简化处理，实际可以通过rateLimitMW进行限流检查
-			// 目前先跳过具体的限流逻辑实现
+		// 检查限流中间件是否启用
+		if s.rateLimitMW == nil || !s.rateLimitMW.IsEnabled() {
+			c.Next()
+			return
 		}
+
+		// 执行IP级别的限流检查
+		if !s.rateLimitMW.AllowRequest(c.Request) {
+			clientIP := s.getClientIP(c.Request)
+			s.logger.V(1).Info("Rate limit exceeded for IP", "ip", clientIP)
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":   "rate limit exceeded",
+				"message": "too many requests from this IP",
+				"code":    "RATE_LIMIT_EXCEEDED",
+			})
+			c.Abort()
+			return
+		}
+
+		// 如果有上游信息，也进行上游级别的限流检查
+		// 注意：这里我们还没有选择上游，所以暂时跳过上游限流
+		// 上游限流会在选择上游后在 processRequest 中进行
+
 		c.Next()
 	}
 }
@@ -265,7 +290,7 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 // handleForward 处理转发请求
 func (s *ForwardService) handleForward(c *gin.Context) {
 	startTime := time.Now()
-	
+
 	// 使用go-trycatch进行错误处理
 	gotrycatch.New().
 		Try(func() error {
@@ -273,11 +298,11 @@ func (s *ForwardService) handleForward(c *gin.Context) {
 			return nil
 		}).
 		Catch(func(err error) {
-			s.logger.Error(err, "Request processing failed", 
-				"method", c.Request.Method, 
+			s.logger.Error(err, "Request processing failed",
+				"method", c.Request.Method,
 				"path", c.Request.URL.Path,
 				"client_ip", c.ClientIP())
-			
+
 			s.sendErrorResponse(c, http.StatusInternalServerError, "Internal server error")
 		}).
 		Do()
@@ -287,7 +312,7 @@ func (s *ForwardService) handleForward(c *gin.Context) {
 func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 	req := c.Request
 	ctx := req.Context()
-	
+
 	// 1. 选择上游服务
 	upstream, err := s.loadBalancer.Select(ctx, s.upstreams)
 	if err != nil {
@@ -295,24 +320,33 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 		s.sendErrorResponse(c, http.StatusServiceUnavailable, "No available upstream")
 		return
 	}
-	
-	// 2. 检查熔断器状态
+
+	// 2. 检查上游级别的限流
+	if s.rateLimitMW != nil && s.rateLimitMW.IsEnabled() {
+		if !s.rateLimitMW.AllowUpstream(upstream.Name) {
+			s.logger.V(1).Info("Rate limit exceeded for upstream", "upstream", upstream.Name)
+			s.sendErrorResponse(c, http.StatusTooManyRequests, "Too many requests to upstream service")
+			return
+		}
+	}
+
+	// 3. 检查熔断器状态
 	if cb, exists := s.circuitBreakers[upstream.Name]; exists {
 		if cb.State() == gobreaker.StateOpen {
 			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Service temporarily unavailable")
 			return
 		}
 	}
-	
-	// 3. 创建请求副本
-	proxyReq, err := s.createProxyRequest(req, upstream)
+
+	// 4. 创建请求副本
+	proxyReq, err := s.createProxyRequest(req)
 	if err != nil {
 		s.logger.Error(err, "Failed to create proxy request")
 		s.sendErrorResponse(c, http.StatusInternalServerError, "Failed to create proxy request")
 		return
 	}
-	
-	// 4. 执行请求（通过熔断器保护）
+
+	// 5. 执行请求（通过熔断器保护）
 	var resp *http.Response
 	if cb, exists := s.circuitBreakers[upstream.Name]; exists {
 		result, err := cb.Execute(func() (interface{}, error) {
@@ -332,17 +366,17 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 			return
 		}
 	}
-	
+
 	defer resp.Body.Close()
-	
-	// 5. 计算响应时间并更新负载均衡器
+
+	// 6. 计算响应时间并更新负载均衡器
 	latency := time.Since(startTime).Milliseconds()
 	s.loadBalancer.UpdateLatency(upstream.Name, latency)
-	
-	// 6. 转发响应
+
+	// 7. 转发响应
 	s.forwardResponse(c, resp)
-	
-	// 7. 记录访问日志
+
+	// 8. 记录访问日志
 	s.logger.Info("Request forwarded successfully",
 		"method", req.Method,
 		"path", req.URL.Path,
@@ -352,36 +386,64 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 }
 
 // createProxyRequest 创建代理请求
-func (s *ForwardService) createProxyRequest(originalReq *http.Request, upstream balance.Upstream) (*http.Request, error) {
-	// 创建新的请求
-	body := originalReq.Body
-	if body != nil {
-		// 对于有body的请求，需要复制body内容
-		// 这里简化处理，实际项目中可能需要更复杂的body处理
+func (s *ForwardService) createProxyRequest(originalReq *http.Request) (*http.Request, error) {
+	var proxyBody io.Reader
+
+	// 处理请求体
+	if originalReq.Body != nil {
+		// 确保原始请求体在函数结束时被关闭
+		defer func() {
+			if closeErr := originalReq.Body.Close(); closeErr != nil {
+				s.logger.V(1).Info("Failed to close original request body", "error", closeErr)
+			}
+		}()
+
+		// 使用 LimitReader 限制读取大小，防止内存耗尽
+		limitedReader := io.LimitReader(originalReq.Body, MaxRequestBodySize+1)
+
+		// 读取请求体内容到内存
+		bodyBytes, err := io.ReadAll(limitedReader)
+		if err != nil {
+			s.logger.Error(err, "Failed to read request body")
+			return nil, fmt.Errorf("failed to read request body: %w", err)
+		}
+
+		// 检查是否超过大小限制
+		if len(bodyBytes) > MaxRequestBodySize {
+			s.logger.V(1).Info("Request body too large", "size", len(bodyBytes), "limit", MaxRequestBodySize)
+			return nil, fmt.Errorf("request body too large: %d bytes (limit: %d bytes)", len(bodyBytes), MaxRequestBodySize)
+		}
+
+		// 创建新的可读取的请求体
+		if len(bodyBytes) > 0 {
+			proxyBody = bytes.NewReader(bodyBytes)
+			s.logger.V(2).Info("Request body copied", "size", len(bodyBytes))
+		}
 	}
-	
+
+	// 创建新的代理请求
 	proxyReq, err := http.NewRequestWithContext(
 		originalReq.Context(),
 		originalReq.Method,
 		originalReq.URL.String(), // URL会在httpClient中被重写
-		body,
+		proxyBody,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create proxy request: %w", err)
 	}
-	
+
 	// 复制原始请求的头部
 	for name, values := range originalReq.Header {
 		for _, value := range values {
 			proxyReq.Header.Add(name, value)
 		}
 	}
-	
+
 	// 设置代理相关头部
 	proxyReq.Header.Set("X-Forwarded-For", s.getClientIP(originalReq))
 	proxyReq.Header.Set("X-Forwarded-Proto", s.getScheme(originalReq))
 	proxyReq.Header.Set("X-Forwarded-Host", originalReq.Host)
-	
+
 	return proxyReq, nil
 }
 
@@ -393,10 +455,10 @@ func (s *ForwardService) forwardResponse(c *gin.Context, resp *http.Response) {
 			c.Header(name, value)
 		}
 	}
-	
+
 	// 设置状态码
 	c.Status(resp.StatusCode)
-	
+
 	// 判断是否为流式响应
 	if s.isStreamingResponse(resp) {
 		s.forwardStreamingResponse(c, resp)
@@ -409,8 +471,8 @@ func (s *ForwardService) forwardResponse(c *gin.Context, resp *http.Response) {
 func (s *ForwardService) isStreamingResponse(resp *http.Response) bool {
 	contentType := resp.Header.Get("Content-Type")
 	return strings.Contains(contentType, "text/event-stream") ||
-		   strings.Contains(contentType, "application/stream+json") ||
-		   resp.Header.Get("Transfer-Encoding") == "chunked"
+		strings.Contains(contentType, "application/stream+json") ||
+		resp.Header.Get("Transfer-Encoding") == "chunked"
 }
 
 // forwardStreamingResponse 转发流式响应
@@ -418,7 +480,7 @@ func (s *ForwardService) forwardStreamingResponse(c *gin.Context, resp *http.Res
 	// 确保响应支持流式传输
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	
+
 	// 流式复制响应体
 	buffer := make([]byte, 4096)
 	for {
@@ -464,15 +526,15 @@ func (s *ForwardService) getClientIP(req *http.Request) string {
 		}
 		return strings.TrimSpace(xff)
 	}
-	
+
 	if xri := req.Header.Get("X-Real-IP"); xri != "" {
 		return strings.TrimSpace(xri)
 	}
-	
+
 	if idx := strings.LastIndex(req.RemoteAddr, ":"); idx >= 0 {
 		return req.RemoteAddr[:idx]
 	}
-	
+
 	return req.RemoteAddr
 }
 
@@ -491,11 +553,11 @@ func (s *ForwardService) getScheme(req *http.Request) string {
 func (s *ForwardService) Run() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if s.running {
 		return
 	}
-	
+
 	s.running = true
 	s.logger.Info("Forward service started")
 }
@@ -504,19 +566,19 @@ func (s *ForwardService) Run() {
 func (s *ForwardService) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if !s.running {
 		return
 	}
-	
+
 	s.running = false
 	close(s.stopCh)
-	
+
 	// 清理资源
 	if s.httpClient != nil {
 		s.httpClient.Close()
 	}
-	
+
 	s.logger.Info("Forward service stopped")
 }
 

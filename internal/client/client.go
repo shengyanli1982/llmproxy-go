@@ -22,14 +22,14 @@ var (
 
 // httpClient HTTP客户端实现
 type httpClient struct {
-	name           string
-	client         *http.Client
-	pool           *ConnectionPool
-	retryHandler   *RetryHandler
-	proxyHandler   *ProxyHandler
-	config         *Config
-	closed         bool
-	
+	name         string
+	client       *http.Client
+	pool         *ConnectionPool
+	retryHandler *RetryHandler
+	proxyHandler *ProxyHandler
+	config       *Config
+	closed       bool
+
 	// 依赖的模块
 	authFactory    auth.AuthenticatorFactory
 	headerOperator headers.HeaderOperator
@@ -53,7 +53,7 @@ func NewHTTPClient(config *Config) (HTTPClient, error) {
 	retryHandler := NewRetryHandler(config)
 
 	// 创建代理处理器
-	proxyHandler := NewProxyHandler(config.ProxyURL)
+	proxyHandler := NewProxyHandlerFromURL(config.ProxyURL)
 
 	// 创建HTTP客户端
 	client := &http.Client{
@@ -118,7 +118,7 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 	// 直接使用upstream的URL
 	req.URL.Scheme = "http"
 	req.URL.Host = upstream.URL
-	
+
 	// 如果URL包含scheme，保持原有设置
 	if len(upstream.URL) > 8 && upstream.URL[:8] == "https://" {
 		req.URL.Scheme = "https"

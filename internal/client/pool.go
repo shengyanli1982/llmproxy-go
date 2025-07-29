@@ -23,25 +23,25 @@ func NewConnectionPool(config *Config) *ConnectionPool {
 		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
 		MaxConnsPerHost:     config.MaxConnsPerHost,
 		IdleConnTimeout:     time.Duration(config.IdleConnTimeout) * time.Second,
-		
+
 		// 拨号配置
 		DialContext: (&net.Dialer{
 			Timeout:   time.Duration(config.ConnectTimeout) * time.Second,
-			KeepAlive: 30 * time.Second,
+			KeepAlive: 90 * time.Second,
 		}).DialContext,
-		
+
 		// TLS配置
-		TLSHandshakeTimeout: 10 * time.Second,
+		TLSHandshakeTimeout: 30 * time.Second,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: false,
 		},
-		
+
 		// Keep-Alive配置
 		DisableKeepAlives: !config.EnableKeepAlive,
-		
+
 		// 响应头超时
 		ResponseHeaderTimeout: time.Duration(config.RequestTimeout) * time.Second,
-		
+
 		// 期望继续超时
 		ExpectContinueTimeout: 1 * time.Second,
 	}
@@ -68,16 +68,4 @@ func (p *ConnectionPool) GetTransport() *http.Transport {
 func (p *ConnectionPool) Close() error {
 	p.transport.CloseIdleConnections()
 	return nil
-}
-
-// Stats 获取连接池统计信息
-func (p *ConnectionPool) Stats() map[string]interface{} {
-	return map[string]interface{}{
-		"max_idle_conns":         p.config.MaxIdleConns,
-		"max_idle_conns_per_host": p.config.MaxIdleConnsPerHost,
-		"max_conns_per_host":     p.config.MaxConnsPerHost,
-		"idle_conn_timeout":      p.config.IdleConnTimeout,
-		"connect_timeout":        p.config.ConnectTimeout,
-		"enable_keep_alive":      p.config.EnableKeepAlive,
-	}
 }

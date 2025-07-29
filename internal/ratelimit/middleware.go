@@ -80,3 +80,19 @@ func (m *RateLimitMiddleware) ResetIP(ip string) {
 func (m *RateLimitMiddleware) ResetUpstream(upstream string) {
 	m.upstreamLimiter.Reset(upstream)
 }
+
+// AllowRequest 检查HTTP请求是否允许通过（IP级别限流）
+func (m *RateLimitMiddleware) AllowRequest(req *http.Request) bool {
+	if !m.enabled {
+		return true
+	}
+	return m.ipLimiter.Allow(req)
+}
+
+// AllowUpstream 检查指定上游是否允许通过（上游级别限流）
+func (m *RateLimitMiddleware) AllowUpstream(upstream string) bool {
+	if !m.enabled {
+		return true
+	}
+	return m.upstreamLimiter.Allow(upstream)
+}

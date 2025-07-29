@@ -10,10 +10,10 @@ import (
 type HTTPClient interface {
 	// Do 执行HTTP请求到指定上游服务
 	Do(req *http.Request, upstream *balance.Upstream) (*http.Response, error)
-	
+
 	// Close 关闭客户端并清理资源
 	Close() error
-	
+
 	// Name 获取客户端名称
 	Name() string
 }
@@ -26,16 +26,16 @@ type HTTPClientFactory interface {
 
 // Config 代表HTTP客户端配置
 type Config struct {
-	MaxIdleConns        int  // 最大空闲连接数
-	MaxIdleConnsPerHost int  // 每个主机最大空闲连接数
-	MaxConnsPerHost     int  // 每个主机最大连接数
-	IdleConnTimeout     int  // 空闲连接超时时间(秒)
-	ConnectTimeout      int  // 连接超时时间(秒)
-	RequestTimeout      int  // 请求超时时间(秒)
-	EnableKeepAlive     bool // 是否启用Keep-Alive
-	EnableRetry         bool // 是否启用重试
-	MaxRetries          int  // 最大重试次数
-	RetryDelay          int  // 重试延迟时间(毫秒)
+	MaxIdleConns        int    // 最大空闲连接数
+	MaxIdleConnsPerHost int    // 每个主机最大空闲连接数
+	MaxConnsPerHost     int    // 每个主机最大连接数
+	IdleConnTimeout     int    // 空闲连接超时时间(秒)
+	ConnectTimeout      int    // 连接超时时间(秒)
+	RequestTimeout      int    // 请求超时时间(秒)
+	EnableKeepAlive     bool   // 是否启用Keep-Alive
+	EnableRetry         bool   // 是否启用重试
+	MaxRetries          int    // 最大重试次数
+	RetryDelay          int    // 重试延迟时间(毫秒)
 	ProxyURL            string // 代理URL
 }
 

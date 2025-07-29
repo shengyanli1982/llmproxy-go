@@ -11,15 +11,15 @@ import (
 
 // ForwardServer 代表转发服务器，负责处理客户端请求并转发到上游服务
 type ForwardServer struct {
-	name       string                // 服务器名称
-	endpoint   string                // 服务器监听地址
-	httpEngine *orbit.Engine         // HTTP 引擎实例
-	closeOnce  sync.Once             // 确保只关闭一次
-	config     *config.ForwardConfig // 转发服务配置
-	globalConfig *config.Config      // 全局配置
-	debug      bool                  // 是否启用调试模式
-	logger     *logr.Logger          // 日志记录器
-	service    *ForwardService       // 转发服务实例
+	name         string                // 服务器名称
+	endpoint     string                // 服务器监听地址
+	httpEngine   *orbit.Engine         // HTTP 引擎实例
+	closeOnce    sync.Once             // 确保只关闭一次
+	config       *config.ForwardConfig // 转发服务配置
+	globalConfig *config.Config        // 全局配置
+	debug        bool                  // 是否启用调试模式
+	logger       *logr.Logger          // 日志记录器
+	service      *ForwardService       // 转发服务实例
 }
 
 // NewForwardServer 创建新的转发服务器实例
@@ -42,16 +42,13 @@ func NewForwardServer(debug bool, logger *logr.Logger, config *config.ForwardCon
 
 	// 创建引擎选项
 	opts := orbit.EmptyOptions()
-	if debug {
-		opts = orbit.DebugOptions()
-	}
 
 	// 创建 HTTP 引擎
 	engine := orbit.NewEngine(cfg, opts)
 
 	// 创建转发服务实例
 	svcs := NewForwardServices()
-	
+
 	// 初始化转发服务
 	if err := svcs.Initialize(config, globalConfig, logger); err != nil {
 		logger.Error(err, "Failed to initialize forward service")

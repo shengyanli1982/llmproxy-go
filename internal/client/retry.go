@@ -5,17 +5,58 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/shengyanli1982/retry"
 )
 
 // RetryHandler 重试处理器
 type RetryHandler struct {
-	config *Config
+	config     *Config
+	retryAgent *retry.Retry
 }
 
 // NewRetryHandler 创建新的重试处理器实例
 func NewRetryHandler(config *Config) *RetryHandler {
+	// 创建重试配置
+	retryConfig := retry.NewConfig()
+
+	if config.EnableRetry {
+		// 设置重试次数
+		if config.MaxRetries > 0 {
+			retryConfig = retryConfig.WithAttempts(uint64(config.MaxRetries))
+		}
+
+		// 设置初始延迟
+		if config.RetryDelay > 0 {
+			retryConfig = retryConfig.WithInitDelay(time.Duration(config.RetryDelay) * time.Millisecond)
+		}
+
+		// 设置指数退避因子
+		retryConfig = retryConfig.WithFactor(2.0)
+
+		// 设置重试条件函数
+		retryConfig = retryConfig.WithRetryIfFunc(func(err error) bool {
+			if err == nil {
+				return false
+			}
+			// 检查是否是可重试的错误
+			if retryableErr, ok := err.(*RetryableError); ok {
+				return retryableErr != nil
+			}
+			// 网络错误通常可以重试
+			return true
+		})
+	} else {
+		// 如果禁用重试，设置重试次数为1（即不重试）
+		retryConfig = retryConfig.WithAttempts(1)
+	}
+
+	// 创建重试实例
+	retryAgent := retry.New(retryConfig)
+
 	return &RetryHandler{
-		config: config,
+		config:     config,
+		retryAgent: retryAgent,
 	}
 }
 
@@ -26,79 +67,36 @@ func (r *RetryHandler) DoWithRetry(ctx context.Context, fn func() (*http.Respons
 		return fn()
 	}
 
-	var lastErr error
-	maxRetries := r.config.MaxRetries
-	if maxRetries <= 0 {
-		maxRetries = 1
-	}
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// 检查上下文是否已取消
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
+	// 使用新的retry库执行重试
+	result := r.retryAgent.TryOnConflict(func() (any, error) {
 		response, err := fn()
 		if err != nil {
-			lastErr = err
-			if attempt < maxRetries-1 {
-				// 等待后重试
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(r.calculateDelay(attempt)):
-					continue
-				}
-			}
-			continue
+			return nil, err
 		}
 
 		// 检查是否需要重试
 		if r.shouldRetry(response) {
 			response.Body.Close()
-			lastErr = &RetryableError{Message: "server error, retrying"}
-			if attempt < maxRetries-1 {
-				// 等待后重试
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(r.calculateDelay(attempt)):
-					continue
-				}
-			}
-			continue
+			return nil, &RetryableError{Message: "server error, retrying"}
 		}
 
-		// 成功，返回响应
+		return response, nil
+	})
+
+	// 检查结果
+	if !result.IsSuccess() {
+		if result.TryError() != nil {
+			return nil, result.TryError()
+		}
+		return nil, errors.New("max retries exceeded")
+	}
+
+	// 返回成功的响应
+	if response, ok := result.Data().(*http.Response); ok {
 		return response, nil
 	}
 
-	// 所有重试都失败了
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	return nil, errors.New("max retries exceeded")
-}
-
-// calculateDelay 计算重试延迟（指数退避）
-func (r *RetryHandler) calculateDelay(attempt int) time.Duration {
-	baseDelay := time.Duration(r.config.RetryDelay) * time.Millisecond
-	
-	// 指数退避：baseDelay * 2^attempt
-	delay := baseDelay
-	for i := 0; i < attempt; i++ {
-		delay *= 2
-	}
-	
-	// 限制最大延迟为30秒
-	maxDelay := 30 * time.Second
-	if delay > maxDelay {
-		delay = maxDelay
-	}
-	
-	return delay
+	return nil, errors.New("unexpected result type")
 }
 
 // shouldRetry 判断是否应该重试
@@ -109,12 +107,12 @@ func (r *RetryHandler) shouldRetry(resp *http.Response) bool {
 
 	// 基于状态码判断是否重试
 	switch resp.StatusCode {
-	case http.StatusInternalServerError,     // 500
-		http.StatusBadGateway,               // 502
-		http.StatusServiceUnavailable,       // 503
-		http.StatusGatewayTimeout:           // 504
+	case http.StatusInternalServerError, // 500
+		http.StatusBadGateway,         // 502
+		http.StatusServiceUnavailable, // 503
+		http.StatusGatewayTimeout:     // 504
 		return true
-	case http.StatusTooManyRequests:        // 429
+	case http.StatusTooManyRequests: // 429
 		return true
 	default:
 		return false
