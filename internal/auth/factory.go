@@ -14,17 +14,17 @@ var (
 	ErrInvalidAuthConfig = errors.New("invalid auth config")
 )
 
-// defaultFactory 代表默认认证器工厂实现
-type defaultFactory struct{}
+// authFactory 代表认证器工厂实现
+type authFactory struct{}
 
 // NewFactory 创建新的认证器工厂实例
 func NewFactory() AuthenticatorFactory {
-	return &defaultFactory{}
+	return &authFactory{}
 }
 
 // Create 根据配置创建对应的认证器
 // authConfig: 认证配置信息
-func (f *defaultFactory) Create(authConfig *config.AuthConfig) (Authenticator, error) {
+func (f *authFactory) Create(authConfig *config.AuthConfig) (Authenticator, error) {
 	if authConfig == nil {
 		return nil, ErrNilAuthConfig
 	}

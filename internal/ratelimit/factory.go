@@ -10,16 +10,16 @@ var (
 	ErrInvalidBurst     = errors.New("burst must be greater than 0")
 )
 
-// defaultFactory 代表默认限流器工厂实现
-type defaultFactory struct{}
+// rateLimitFactory 代表限流器工厂实现
+type rateLimitFactory struct{}
 
 // NewFactory 创建新的限流器工厂实例
 func NewFactory() RateLimiterFactory {
-	return &defaultFactory{}
+	return &rateLimitFactory{}
 }
 
 // Create 根据配置创建限流器
-func (f *defaultFactory) Create(perSecond float64, burst int) (RateLimiter, error) {
+func (f *rateLimitFactory) Create(perSecond float64, burst int) (RateLimiter, error) {
 	if perSecond <= 0 {
 		return nil, ErrInvalidPerSecond
 	}

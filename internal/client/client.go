@@ -35,8 +35,8 @@ type httpClient struct {
 	headerOperator headers.HeaderOperator
 }
 
-// NewHttpClient 创建新的HTTP客户端实例
-func NewHttpClient(config *Config) (HttpClient, error) {
+// NewHTTPClient 创建新的HTTP客户端实例
+func NewHTTPClient(config *Config) (HTTPClient, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}

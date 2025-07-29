@@ -6,8 +6,8 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 )
 
-// HttpClient 代表HTTP客户端接口
-type HttpClient interface {
+// HTTPClient 代表HTTP客户端接口
+type HTTPClient interface {
 	// Do 执行HTTP请求到指定上游服务
 	Do(req *http.Request, upstream *balance.Upstream) (*http.Response, error)
 	
@@ -18,10 +18,10 @@ type HttpClient interface {
 	Name() string
 }
 
-// HttpClientFactory 代表HTTP客户端工厂接口
-type HttpClientFactory interface {
+// HTTPClientFactory 代表HTTP客户端工厂接口
+type HTTPClientFactory interface {
 	// Create 根据配置创建HTTP客户端
-	Create(config *Config) (HttpClient, error)
+	Create(config *Config) (HTTPClient, error)
 }
 
 // Config 代表HTTP客户端配置

@@ -5,16 +5,16 @@ import (
 	"sync"
 )
 
-// weightedRoundRobinBalancer 实现加权轮询负载均衡算法
+// WeightedRRBalancer 实现加权轮询负载均衡算法
 // 根据上游服务的权重进行选择，权重越高被选中的概率越大
-type weightedRoundRobinBalancer struct {
+type WeightedRRBalancer struct {
 	mu      sync.Mutex     // 保护并发访问
 	weights map[string]int // 当前权重映射
 }
 
-// NewWeightedRoundRobinBalancer 创建新的加权轮询负载均衡器实例
-func NewWeightedRoundRobinBalancer() LoadBalancer {
-	return &weightedRoundRobinBalancer{
+// NewWeightedRRBalancer 创建新的加权轮询负载均衡器实例
+func NewWeightedRRBalancer() LoadBalancer {
+	return &WeightedRRBalancer{
 		weights: make(map[string]int),
 	}
 }
@@ -22,7 +22,7 @@ func NewWeightedRoundRobinBalancer() LoadBalancer {
 // Select 使用加权轮询算法选择上游服务
 // ctx: 上下文信息
 // upstreams: 可用的上游服务列表
-func (b *weightedRoundRobinBalancer) Select(ctx context.Context, upstreams []Upstream) (Upstream, error) {
+func (b *WeightedRRBalancer) Select(ctx context.Context, upstreams []Upstream) (Upstream, error) {
 	if upstreams == nil {
 		return Upstream{}, ErrNilUpstreams
 	}
@@ -65,18 +65,18 @@ func (b *weightedRoundRobinBalancer) Select(ctx context.Context, upstreams []Ups
 // UpdateHealth 更新健康状态（加权轮询算法不需要此信息）
 // upstreamName: 上游服务名称
 // healthy: 健康状态
-func (b *weightedRoundRobinBalancer) UpdateHealth(upstreamName string, healthy bool) {
+func (b *WeightedRRBalancer) UpdateHealth(upstreamName string, healthy bool) {
 	// 加权轮询算法不需要健康状态信息，此方法为空实现
 }
 
 // UpdateLatency 更新延迟信息（加权轮询算法不需要此信息）
 // upstreamName: 上游服务名称
 // latency: 响应延迟
-func (b *weightedRoundRobinBalancer) UpdateLatency(upstreamName string, latency int64) {
+func (b *WeightedRRBalancer) UpdateLatency(upstreamName string, latency int64) {
 	// 加权轮询算法不需要延迟信息，此方法为空实现
 }
 
 // Type 获取负载均衡器类型
-func (b *weightedRoundRobinBalancer) Type() string {
+func (b *WeightedRRBalancer) Type() string {
 	return "weighted_roundrobin"
 }

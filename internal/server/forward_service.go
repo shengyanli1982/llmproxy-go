@@ -30,7 +30,7 @@ type ForwardService struct {
 	
 	// 功能模块
 	loadBalancer     balance.LoadBalancer            // 负载均衡器
-	httpClient       client.HttpClient               // HTTP客户端
+	httpClient       client.HTTPClient               // HTTP客户端
 	rateLimitMW      *ratelimit.RateLimitMiddleware  // 限流中间件
 	authFactory      auth.AuthenticatorFactory       // 认证工厂
 	headerOperator   headers.HeaderOperator          // 头部操作器

@@ -12,16 +12,16 @@ var (
 	ErrNilSettings   = errors.New("breaker settings cannot be nil")
 )
 
-// defaultFactory 代表默认熔断器工厂实现
-type defaultFactory struct{}
+// breakerFactory 代表熔断器工厂实现
+type breakerFactory struct{}
 
 // NewFactory 创建新的熔断器工厂实例
 func NewFactory() CircuitBreakerFactory {
-	return &defaultFactory{}
+	return &breakerFactory{}
 }
 
 // Create 根据配置创建熔断器
-func (f *defaultFactory) Create(name string, settings gobreaker.Settings) (CircuitBreaker, error) {
+func (f *breakerFactory) Create(name string, settings gobreaker.Settings) (CircuitBreaker, error) {
 	if name == "" {
 		return nil, ErrEmptyName
 	}
@@ -29,7 +29,7 @@ func (f *defaultFactory) Create(name string, settings gobreaker.Settings) (Circu
 	// 使用提供的settings创建gobreaker实例
 	gb := gobreaker.NewCircuitBreaker(settings)
 	
-	return &circuitBreakerWrapper{
+	return &BreakerWrapper{
 		name: name,
 		cb:   gb,
 	}, nil

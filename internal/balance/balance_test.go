@@ -18,7 +18,7 @@ func TestRoundRobinBalancer(t *testing.T) {
 		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
 	}
 
-	balancer := NewRoundRobinBalancer()
+	balancer := NewRRBalancer()
 	ctx := context.Background()
 
 	// Test round robin selection
@@ -41,7 +41,7 @@ func TestWeightedRoundRobinBalancer(t *testing.T) {
 		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
 	}
 
-	balancer := NewWeightedRoundRobinBalancer()
+	balancer := NewWeightedRRBalancer()
 	ctx := context.Background()
 
 	// Collect selections to verify weight distribution
@@ -197,7 +197,7 @@ func TestFactory_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			balancer, err := factory.Create(tt.config)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, balancer)
@@ -229,8 +229,8 @@ func TestSlidingWindow(t *testing.T) {
 
 func TestEmptyUpstreams(t *testing.T) {
 	balancers := []LoadBalancer{
-		NewRoundRobinBalancer(),
-		NewWeightedRoundRobinBalancer(),
+		NewRRBalancer(),
+		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
 		NewResponseAwareBalancer(),
 		NewFailoverBalancer(),
@@ -259,10 +259,10 @@ func TestBalancerWithBreaker(t *testing.T) {
 	if breakerBalancer, ok := balancer.(LoadBalancerWithBreaker); ok {
 		// Test creating a breaker
 		settings := gobreaker.Settings{
-			Name:         "test-breaker",
-			MaxRequests:  3,
-			Interval:     10 * time.Second,
-			Timeout:      5 * time.Second,
+			Name:        "test-breaker",
+			MaxRequests: 3,
+			Interval:    10 * time.Second,
+			Timeout:     5 * time.Second,
 			ReadyToTrip: func(counts gobreaker.Counts) bool {
 				return counts.ConsecutiveFailures > 2
 			},
@@ -285,10 +285,10 @@ func BenchmarkRoundRobinBalancer_Select(b *testing.B) {
 		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
 		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
 	}
-	
-	balancer := NewRoundRobinBalancer()
+
+	balancer := NewRRBalancer()
 	ctx := context.Background()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = balancer.Select(ctx, upstreams)
@@ -301,15 +301,15 @@ func BenchmarkResponseAwareBalancer_Select(b *testing.B) {
 		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
 		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
 	}
-	
+
 	balancer := NewResponseAwareBalancer()
 	ctx := context.Background()
-	
+
 	// Simulate some latency data
 	balancer.UpdateLatency("upstream1", 100)
 	balancer.UpdateLatency("upstream2", 200)
 	balancer.UpdateLatency("upstream3", 150)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = balancer.Select(ctx, upstreams)
@@ -348,11 +348,11 @@ func TestCreateFromConfig(t *testing.T) {
 			wantError: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			balancer, err := CreateFromConfig(tt.config)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, balancer)
@@ -367,13 +367,13 @@ func TestCreateFromConfig(t *testing.T) {
 
 func TestUpdateHealthMethods(t *testing.T) {
 	balancers := []LoadBalancer{
-		NewRoundRobinBalancer(),
-		NewWeightedRoundRobinBalancer(),
+		NewRRBalancer(),
+		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
 		NewResponseAwareBalancer(),
 		NewFailoverBalancer(),
 	}
-	
+
 	for _, balancer := range balancers {
 		t.Run(balancer.Type()+"_UpdateHealth", func(t *testing.T) {
 			// Should not panic
@@ -385,13 +385,13 @@ func TestUpdateHealthMethods(t *testing.T) {
 
 func TestUpdateLatencyMethods(t *testing.T) {
 	balancers := []LoadBalancer{
-		NewRoundRobinBalancer(),
-		NewWeightedRoundRobinBalancer(),
+		NewRRBalancer(),
+		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
 		NewResponseAwareBalancer(),
 		NewFailoverBalancer(),
 	}
-	
+
 	for _, balancer := range balancers {
 		t.Run(balancer.Type()+"_UpdateLatency", func(t *testing.T) {
 			// Should not panic
@@ -405,39 +405,39 @@ func TestResponseAwareBalancer_WithBreaker(t *testing.T) {
 	upstreams := []Upstream{
 		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
 	}
-	
+
 	balancer := NewResponseAwareBalancer()
 	ctx := context.Background()
-	
+
 	// Test implementing LoadBalancerWithBreaker interface
 	if breakerBalancer, ok := balancer.(LoadBalancerWithBreaker); ok {
 		// Test GetBreaker before creating one
 		_, exists := breakerBalancer.GetBreaker("upstream1")
 		assert.False(t, exists)
-		
+
 		// Create breaker
 		settings := gobreaker.Settings{
-			Name:         "test-breaker",
-			MaxRequests:  3,
-			Interval:     10 * time.Second,
-			Timeout:      5 * time.Second,
+			Name:        "test-breaker",
+			MaxRequests: 3,
+			Interval:    10 * time.Second,
+			Timeout:     5 * time.Second,
 			ReadyToTrip: func(counts gobreaker.Counts) bool {
 				return counts.ConsecutiveFailures > 2
 			},
 		}
-		
+
 		err := breakerBalancer.CreateBreaker("upstream1", settings)
 		assert.NoError(t, err)
-		
+
 		// Test GetBreaker after creating one
 		breaker, exists := breakerBalancer.GetBreaker("upstream1")
 		assert.True(t, exists)
 		assert.NotNil(t, breaker)
-		
+
 		// Test creating breaker for same upstream again (should not error)
 		err = breakerBalancer.CreateBreaker("upstream1", settings)
 		assert.NoError(t, err)
-		
+
 		// Should still be able to select upstream
 		upstream, err := balancer.Select(ctx, upstreams)
 		assert.NoError(t, err)
@@ -451,34 +451,34 @@ func TestFailoverBalancer_HealthCheck(t *testing.T) {
 		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
 		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
 	}
-	
+
 	balancer := NewFailoverBalancer()
 	ctx := context.Background()
-	
+
 	// Initially should select first upstream
 	upstream, err := balancer.Select(ctx, upstreams)
 	require.NoError(t, err)
 	assert.Equal(t, "upstream1", upstream.Name)
-	
+
 	// Update health for first upstream
 	balancer.UpdateHealth("upstream1", false)
-	
+
 	// Should now select second upstream
 	upstream, err = balancer.Select(ctx, upstreams)
 	require.NoError(t, err)
 	assert.Equal(t, "upstream2", upstream.Name)
-	
+
 	// Mark second as unhealthy too
 	balancer.UpdateHealth("upstream2", false)
-	
+
 	// Should select third upstream
 	upstream, err = balancer.Select(ctx, upstreams)
 	require.NoError(t, err)
 	assert.Equal(t, "upstream3", upstream.Name)
-	
+
 	// Mark all as unhealthy
 	balancer.UpdateHealth("upstream3", false)
-	
+
 	// Should still return first upstream as last resort (failover behavior)
 	upstream, err = balancer.Select(ctx, upstreams)
 	require.NoError(t, err)
@@ -487,21 +487,21 @@ func TestFailoverBalancer_HealthCheck(t *testing.T) {
 
 func TestFailoverBalancer_WithBreaker(t *testing.T) {
 	balancer := NewFailoverBalancer()
-	
-	// Test implementing LoadBalancerWithBreaker interface 
+
+	// Test implementing LoadBalancerWithBreaker interface
 	if breakerBalancer, ok := balancer.(LoadBalancerWithBreaker); ok {
 		// Test GetBreaker
 		_, exists := breakerBalancer.GetBreaker("upstream1")
 		assert.False(t, exists)
-		
+
 		// Test CreateBreaker
 		settings := gobreaker.Settings{
 			Name: "test-breaker",
 		}
-		
+
 		err := breakerBalancer.CreateBreaker("upstream1", settings)
 		assert.NoError(t, err)
-		
+
 		// Test GetBreaker after creation
 		breaker, exists := breakerBalancer.GetBreaker("upstream1")
 		assert.True(t, exists)
@@ -515,14 +515,14 @@ func TestSlidingWindow_EdgeCases(t *testing.T) {
 		avg := window.Average()
 		assert.Equal(t, int64(1000), avg) // Default value for empty window
 	})
-	
+
 	t.Run("single value", func(t *testing.T) {
 		window := NewSlidingWindow(1)
 		window.Add(100)
 		avg := window.Average()
 		assert.Equal(t, int64(100), avg)
 	})
-	
+
 	t.Run("zero size window", func(t *testing.T) {
 		window := NewSlidingWindow(0)
 		window.Add(100)
@@ -535,19 +535,19 @@ func TestBalancersWithConfigDefaults(t *testing.T) {
 	// Test balancers with config.default.yaml strategy values
 	strategies := []string{
 		"roundrobin",
-		"weighted_roundrobin", 
+		"weighted_roundrobin",
 		"random",
 		"response_aware",
 		"failover",
 	}
-	
+
 	factory := NewFactory()
-	
+
 	for _, strategy := range strategies {
 		t.Run("strategy_"+strategy, func(t *testing.T) {
 			config := &config.BalanceConfig{Strategy: strategy}
 			balancer, err := factory.Create(config)
-			
+
 			assert.NoError(t, err)
 			assert.NotNil(t, balancer)
 			assert.Equal(t, strategy, balancer.Type())

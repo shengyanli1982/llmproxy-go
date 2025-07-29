@@ -12,17 +12,17 @@ var (
 	ErrNilBalanceConfig = errors.New("balance config cannot be nil")
 )
 
-// defaultFactory 代表默认负载均衡器工厂实现
-type defaultFactory struct{}
+// balanceFactory 代表负载均衡器工厂实现
+type balanceFactory struct{}
 
 // NewFactory 创建新的负载均衡器工厂实例
 func NewFactory() LoadBalancerFactory {
-	return &defaultFactory{}
+	return &balanceFactory{}
 }
 
 // Create 根据配置创建对应的负载均衡器
 // config: 负载均衡配置
-func (f *defaultFactory) Create(config *config.BalanceConfig) (LoadBalancer, error) {
+func (f *balanceFactory) Create(config *config.BalanceConfig) (LoadBalancer, error) {
 	if config == nil {
 		return nil, ErrNilBalanceConfig
 	}
@@ -34,9 +34,9 @@ func (f *defaultFactory) Create(config *config.BalanceConfig) (LoadBalancer, err
 
 	switch strategy {
 	case "roundrobin":
-		return NewRoundRobinBalancer(), nil
+		return NewRRBalancer(), nil
 	case "weighted_roundrobin":
-		return NewWeightedRoundRobinBalancer(), nil
+		return NewWeightedRRBalancer(), nil
 	case "random":
 		return NewRandomBalancer(), nil
 	case "failover":
@@ -57,7 +57,7 @@ func CreateFromConfig(upstreamGroupConfig *config.UpstreamGroupConfig) (LoadBala
 
 	// 如果没有负载均衡配置，使用默认的轮询策略
 	if upstreamGroupConfig.Balance == nil {
-		return NewRoundRobinBalancer(), nil
+		return NewRRBalancer(), nil
 	}
 
 	factory := NewFactory()
