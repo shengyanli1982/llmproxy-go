@@ -101,7 +101,7 @@ func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Re
 	}
 
 	// 准备请求
-	c.logger.V(1).Info("Preparing HTTP request",
+	c.logger.Info("Preparing HTTP request",
 		"method", req.Method,
 		"path", req.URL.Path,
 		"upstream", upstream.Name)

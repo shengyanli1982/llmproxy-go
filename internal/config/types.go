@@ -32,17 +32,17 @@ type AdminConfig struct {
 
 // RateLimitConfig 代表限流配置，控制请求频率和突发流量
 type RateLimitConfig struct {
-	PerSecond int `yaml:"perSecond" validate:"omitempty,min=1"`
-	Burst     int `yaml:"burst" validate:"omitempty,min=1"`
+	PerSecond int `yaml:"perSecond" validate:"omitempty,min=1,max=65535"`
+	Burst     int `yaml:"burst" validate:"omitempty,min=1,max=65535"`
 }
 
 // TimeoutConfig 代表超时配置，定义各种操作的超时时间
 type TimeoutConfig struct {
-	Idle    int `yaml:"idle,omitempty" validate:"omitempty,min=1"`
-	Read    int `yaml:"read,omitempty" validate:"omitempty,min=1"`
-	Write   int `yaml:"write,omitempty" validate:"omitempty,min=1"`
-	Connect int `yaml:"connect,omitempty" validate:"omitempty,min=1"`
-	Request int `yaml:"request,omitempty" validate:"omitempty,min=1"`
+	Idle    int `yaml:"idle,omitempty" validate:"omitempty,min=1,max=86400"`
+	Read    int `yaml:"read,omitempty" validate:"omitempty,min=1,max=86400"`
+	Write   int `yaml:"write,omitempty" validate:"omitempty,min=1,max=86400"`
+	Connect int `yaml:"connect,omitempty" validate:"omitempty,min=1,max=86400"`
+	Request int `yaml:"request,omitempty" validate:"omitempty,min=1,max=86400"`
 }
 
 // UpstreamConfig 代表上游服务配置，定义后端LLM API服务的连接参数
@@ -87,7 +87,7 @@ type UpstreamGroupConfig struct {
 // UpstreamRefConfig 代表上游引用配置，在上游组中引用具体的上游服务
 type UpstreamRefConfig struct {
 	Name   string `yaml:"name" validate:"required"`
-	Weight int    `yaml:"weight,omitempty" validate:"min=1"`
+	Weight int    `yaml:"weight,omitempty" validate:"min=1,max=65535"`
 }
 
 // BalanceConfig 代表负载均衡配置，定义选择上游服务的策略
@@ -114,8 +114,8 @@ type ConnectConfig struct {
 
 // RetryConfig 代表重试配置，定义失败请求的重试策略
 type RetryConfig struct {
-	Attempts int `yaml:"attempts" validate:"min=1"`
-	Initial  int `yaml:"initial" validate:"min=1"`
+	Attempts int `yaml:"attempts" validate:"min=1,max=120"`
+	Initial  int `yaml:"initial" validate:"min=1,max=3600"`
 }
 
 // ProxyConfig 代表代理配置，设置HTTP代理服务器

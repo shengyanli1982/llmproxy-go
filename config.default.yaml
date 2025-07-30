@@ -128,9 +128,7 @@ upstreams:
         # 注意：某些 API (如 Anthropic Claude) 可能要求通过头部传递 API Key 而不是 Bearer Token。
         # 请参考具体 API 文档。此处的 'token' 字段仍可用于 'Bearer' 认证类型，
         # 而头部操作可以用于其他形式的基于头部的密钥传递。
-        value:
-          "YOUR_ANTHROPIC_API_KEY_IN_HEADER_IF_NEEDED" # [条件必填] 当 op 为 "insert" 或 "replace" 时必填。
-          # 如果 API Key 通过头部传递，请在此处配置。
+        value: "YOUR_ANTHROPIC_API_KEY_IN_HEADER_IF_NEEDED" # [条件必填] 当 op 为 "insert" 或 "replace" 时必填。如果 API Key 通过头部传递，请在此处配置。
     # [可选] 限速器配置。如果省略，则不启用限速器功能。
     ratelimit:
       perSecond: 100 # [可选] 每秒允许的最大请求数。默认值: 100
@@ -142,9 +140,7 @@ upstreams:
     auth:
       type: "basic" # [可选] 认证类型。默认值: "none"
       username: "service_user" # [条件必填] 当 type 为 "basic" 时必填。
-      password:
-        "service_password_placeholder" # [条件必填] 当 type 为 "basic" 时必填。
-        # 请替换为实际密码。
+      password: "service_password_placeholder" # [条件必填] 当 type 为 "basic" 时必填。
     # [可选] 熔断器配置
     breaker:
       threshold: 0.5 # [可选] 熔断器触发所需的失败率。默认值: 0.5。取值范围: 0.01-1.0
@@ -187,9 +183,9 @@ upstreamGroups:
         maxPerHost: 50 # [可选] 每个主机最大连接数。默认值: 50。取值范围: 0-500。0 表示使用默认值
       # [可选] 连接和请求超时配置。如果省略，将使用默认值。
       timeout:
-        connect: 10 # [可选] 连接到上游服务的超时时间 (秒)。默认值: 10
-        request: 300 # [可选] 从发送请求到接收到上游完整响应 (非流式) 的超时时间 (秒)。默认值: 300
-        idle: 60 # [可选] 与上游服务的连接在无活动后被视为空闲并关闭的超时时间 (秒)。默认值: 60
+        connect: 10 # [可选] 连接到上游服务的超时时间 (秒)。默认值: 10 秒
+        request: 300 # [可选] 从发送请求到接收到上游完整响应 (非流式) 的超时时间 (秒)。默认值: 300 秒
+        idle: 60 # [可选] 与上游服务的连接在无活动后被视为空闲并关闭的超时时间 (秒)。默认值: 60 秒
       # [可选] 请求重试配置。如果省略，则不启用重试功能。
       retry:
         attempts: 3 # [可选] 最大重试次数 (不包括首次尝试)。默认值: 3
@@ -214,12 +210,12 @@ upstreamGroups:
       strategy: "weighted_roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"
     httpClient: # [可选] 可以为每个组定制 HTTP 客户端行为
       agent: "LLMProxy/1.0 (OpenAIClient)" # [可选] User-Agent。默认值: "LLMProxy/1.0"
-      keepalive: 90 # [可选] 例如，为 OpenAI 连接设置更长的 keepalive。默认值: 60。取值范围: 0-600
+      keepalive: 90 # [可选] 例如，为 OpenAI 连接设置更长的 keepalive。默认值: 60 秒。取值范围: 0-600
       # [可选] 连接和请求超时配置。如果省略，将使用默认值。
       timeout:
-        connect: 10 # [可选] 连接超时。默认值: 10
-        request: 300 # [可选] 请求超时。默认值: 300。对于 OpenAI 请求，通常响应时间较长。
-        idle: 90 # [可选] 空闲连接超时。默认值: 60
+        connect: 10 # [可选] 连接超时。默认值: 10 秒
+        request: 300 # [可选] 请求超时。默认值: 300 秒。对于 OpenAI 请求，通常响应时间较长。
+        idle: 90 # [可选] 空闲连接超时。默认值: 60 秒
       retry:
         attempts: 2 # [可选] 最大重试次数。默认值: 3
         initial: 1000 # [可选] 初始等待间隔 (毫秒)。默认值: 500
@@ -238,9 +234,9 @@ upstreamGroups:
       keepalive: 60 # [可选] TCP Keepalive 时间。默认值: 60。取值范围: 0-600
       # [可选] 连接和请求超时配置。如果省略，将使用默认值。
       timeout:
-        connect: 15 # [可选] Anthropic 连接可能需要稍长超时。默认值: 10
-        request: 300 # [可选] 请求超时。默认值: 300。Anthropic Claude 的响应也可能较长。
-        idle: 60 # [可选] 空闲连接超时。默认值: 60
+        connect: 15 # [可选] Anthropic 连接可能需要稍长超时。默认值: 10 秒
+        request: 300 # [可选] 请求超时。默认值: 300 秒。Anthropic Claude 的响应也可能较长。
+        idle: 60 # [可选] 空闲连接超时。默认值: 60 秒
       retry:
         attempts: 2 # [可选] 最大重试次数。默认值: 3
         initial: 1000 # [可选] 初始等待间隔 (毫秒)。默认值: 500
@@ -261,11 +257,11 @@ upstreamGroups:
       keepalive: 60 # [可选] TCP Keepalive 时间。默认值: 60。取值范围: 0-600
       # [可选] 连接和请求超时配置。如果省略，将使用默认值。
       timeout:
-        connect: 10 # [可选] 连接超时。默认值: 10
-        request: 300 # [可选] 请求超时。默认值: 300
-        idle: 60 # [可选] 空闲连接超时。默认值: 60
-        read: 30 # [可选] 读取超时。默认值: 30
-        write: 30 # [可选] 写入超时。默认值: 30
+        connect: 10 # [可选] 连接超时。默认值: 10 秒
+        request: 300 # [可选] 请求超时。默认值: 300 秒
+        idle: 60 # [可选] 空闲连接超时。默认值: 60 秒
+        read: 30 # [可选] 读取超时。默认值: 30 秒
+        write: 30 # [可选] 写入超时。默认值: 30 秒
       retry:
         attempts: 2 # [可选] 最大重试次数。默认值: 3
         initial: 1000 # [可选] 初始等待间隔 (毫秒)。默认值: 500
