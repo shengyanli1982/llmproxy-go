@@ -3,6 +3,7 @@ package client
 import (
 	"net/http"
 
+	"github.com/go-logr/logr"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 )
@@ -17,6 +18,9 @@ type HTTPClient interface {
 
 	// Name 获取客户端名称
 	Name() string
+
+	// SetLogger 设置日志记录器
+	SetLogger(logger logr.Logger)
 }
 
 // HTTPClientFactory 代表HTTP客户端工厂接口

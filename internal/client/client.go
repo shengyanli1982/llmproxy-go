@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
@@ -35,6 +36,9 @@ type httpClient struct {
 	// 依赖的模块
 	authFactory    auth.AuthenticatorFactory
 	headerOperator headers.HeaderOperator
+
+	// 日志记录器（可选）
+	logger logr.Logger
 }
 
 // NewHTTPClient 创建新的HTTP客户端实例
@@ -80,6 +84,7 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 		closed:         false,
 		authFactory:    auth.NewFactory(),
 		headerOperator: headers.NewOperator(),
+		logger:         logr.Discard(), // 默认使用丢弃日志记录器
 	}, nil
 }
 
@@ -96,7 +101,13 @@ func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Re
 	}
 
 	// 准备请求
+	c.logger.V(1).Info("Preparing HTTP request",
+		"method", req.Method,
+		"path", req.URL.Path,
+		"upstream", upstream.Name)
+
 	if err := c.prepareRequest(req, upstream); err != nil {
+		c.logger.Error(err, "Failed to prepare request", "upstream", upstream.Name)
 		return nil, fmt.Errorf("failed to prepare request: %w", err)
 	}
 
@@ -112,11 +123,18 @@ func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Re
 	})
 }
 
-// prepareRequest 准备HTTP请求
+// prepareRequest 准备HTTP请求，设置目标URL和认证信息
+// 注意：此方法会修改传入的http.Request，调用者需要确保并发安全
 func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstream) error {
-	// 验证upstream URL不为空
+	// 验证输入参数
+	if req == nil {
+		return ErrNilRequest
+	}
+	if upstream == nil {
+		return ErrNilUpstream
+	}
 	if upstream.URL == "" {
-		return errors.New("upstream URL cannot be empty")
+		return fmt.Errorf("upstream URL cannot be empty for upstream '%s'", upstream.Name)
 	}
 
 	// 解析upstream URL，处理不带scheme的情况
@@ -233,4 +251,9 @@ func (c *httpClient) Close() error {
 // Name 获取客户端名称
 func (c *httpClient) Name() string {
 	return c.name
+}
+
+// SetLogger 设置日志记录器
+func (c *httpClient) SetLogger(logger logr.Logger) {
+	c.logger = logger
 }

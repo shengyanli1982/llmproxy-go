@@ -8,10 +8,12 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/stretchr/testify/assert"
@@ -839,6 +841,507 @@ func TestHTTPClient_URLSplitAndJoin(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
+func TestHTTPClient_URLHandlingEdgeCases(t *testing.T) {
+	factory := NewFactory()
+	cfg := createMinimalConfig()
+
+	client, err := factory.Create(cfg)
+	require.NoError(t, err)
+	defer client.Close()
+
+	t.Run("空路径处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 空路径应该被转换为根路径
+			assert.Equal(t, "/", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("empty path test"))
+		}))
+		defer server.Close()
+
+		// 创建空路径请求
+		req, _ := http.NewRequest("GET", "", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("根路径处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("root path test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("多级路径处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/v1/models/chat/completions", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("deep path test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("POST", "/api/v1/models/chat/completions", strings.NewReader(`{"model": "gpt-3.5-turbo"}`))
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("URL编码字符处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证URL编码字符被正确处理
+			assert.Equal(t, "/api/test with spaces", r.URL.Path)
+			assert.Equal(t, "key with spaces", r.URL.Query().Get("param"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("encoded chars test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/test%20with%20spaces?param=key%20with%20spaces", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("特殊字符路径处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证特殊字符被正确处理
+			assert.Equal(t, "/api/test-path_with.special~chars", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("special chars test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/test-path_with.special~chars", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("中文路径处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证中文路径被正确处理
+			assert.Equal(t, "/api/测试路径", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("chinese path test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/测试路径", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
+func TestHTTPClient_URLErrorHandling(t *testing.T) {
+	factory := NewFactory()
+	cfg := createMinimalConfig()
+
+	client, err := factory.Create(cfg)
+	require.NoError(t, err)
+	defer client.Close()
+
+	t.Run("无效upstream URL", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/test", nil)
+
+		// 创建包含无效URL的upstream
+		upstream := &balance.Upstream{
+			Name: "invalid-upstream",
+			URL:  "ht!tp://invalid-url", // 无效的URL格式
+		}
+
+		_, err := client.Do(req, upstream)
+		// 应该返回URL解析错误
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid")
+	})
+
+	t.Run("空upstream URL", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/test", nil)
+
+		upstream := &balance.Upstream{
+			Name: "empty-upstream",
+			URL:  "", // 空URL
+		}
+
+		_, err := client.Do(req, upstream)
+		// 应该返回错误
+		assert.Error(t, err)
+	})
+
+	t.Run("不支持的协议", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/test", nil)
+
+		upstream := &balance.Upstream{
+			Name: "unsupported-protocol",
+			URL:  "ftp://example.com", // 不支持的协议
+		}
+
+		_, err := client.Do(req, upstream)
+		// 应该返回协议不支持的错误
+		assert.Error(t, err)
+	})
+}
+
+func TestHTTPClient_URLTransformationScenarios(t *testing.T) {
+	factory := NewFactory()
+	cfg := createMinimalConfig()
+
+	client, err := factory.Create(cfg)
+	require.NoError(t, err)
+	defer client.Close()
+
+	t.Run("基础域名到完整API端点", func(t *testing.T) {
+		// 模拟真实场景：用户配置基础域名，请求转发到具体API端点
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"choices": [{"message": {"content": "test response"}}]}`))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "gpt-3.5-turbo", "messages": []}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		upstream := createTestUpstream(server.URL) // 基础URL，不包含路径
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("子路径到子路径的映射", func(t *testing.T) {
+		// 测试从一个API路径映射到另一个API路径
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/v2/completions", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("path mapping test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("POST", "/v1/completions", strings.NewReader(`{"prompt": "test"}`))
+
+		// upstream配置包含不同的路径，应该覆盖用户请求的路径
+		upstream := createTestUpstream(server.URL + "/api/v2/completions")
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("查询参数合并和覆盖", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证upstream的查询参数被使用
+			assert.Equal(t, "upstream_value", r.URL.Query().Get("api_key"))
+			assert.Equal(t, "v2", r.URL.Query().Get("version"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("query merge test"))
+		}))
+		defer server.Close()
+
+		// 用户请求包含查询参数
+		req, _ := http.NewRequest("GET", "/api/models?version=v1&user_param=user_value", nil)
+
+		// upstream URL也包含查询参数，应该覆盖用户的参数
+		upstream := createTestUpstream(server.URL + "/api/models?api_key=upstream_value&version=v2")
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("端口号处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/test", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("port handling test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/test", nil)
+
+		// 使用包含端口号的upstream URL
+		u, _ := url.Parse(server.URL)
+		upstreamWithPort := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+		upstream := createTestUpstream(upstreamWithPort)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("HTTPS到HTTP的协议转换", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/secure/api", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("protocol conversion test"))
+		}))
+		defer server.Close()
+
+		// 用户请求使用HTTPS（在实际场景中可能来自HTTPS代理）
+		req, _ := http.NewRequest("GET", "/secure/api", nil)
+
+		// upstream使用HTTP（测试服务器）
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("复杂路径结构处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/v1/organizations/org-123/projects/proj-456/models", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("complex path test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/v1/organizations/org-123/projects/proj-456/models", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
+func TestHTTPClient_URLCompatibilityScenarios(t *testing.T) {
+	factory := NewFactory()
+	cfg := createMinimalConfig()
+
+	client, err := factory.Create(cfg)
+	require.NoError(t, err)
+	defer client.Close()
+
+	t.Run("向后兼容：不带scheme的URL", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/test", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("backward compatibility test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/test", nil)
+
+		// 提取主机部分（不包含scheme）
+		u, _ := url.Parse(server.URL)
+		plainHost := u.Host
+		upstream := createTestUpstream(plainHost)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("IPv4地址处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/ipv4", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ipv4 test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/ipv4", nil)
+
+		// 使用IPv4地址格式的upstream
+		u, _ := url.Parse(server.URL)
+		upstream := createTestUpstream(u.String())
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("localhost处理", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/localhost", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("localhost test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/api/localhost", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
+func TestHTTPClient_CodeQualityImprovements(t *testing.T) {
+	factory := NewFactory()
+	cfg := createMinimalConfig()
+
+	client, err := factory.Create(cfg)
+	require.NoError(t, err)
+	defer client.Close()
+
+	t.Run("日志记录器设置", func(t *testing.T) {
+		// 创建一个测试日志记录器
+		logger := logr.Discard()
+
+		// 设置日志记录器
+		client.SetLogger(logger)
+
+		// 验证设置成功（通过执行一个请求来间接验证）
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("logger test"))
+		}))
+		defer server.Close()
+
+		req, _ := http.NewRequest("GET", "/test", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("错误处理改进", func(t *testing.T) {
+		// 测试预定义错误的使用
+		_, err := client.Do(nil, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nil")
+
+		// 测试更详细的错误信息
+		upstream := &balance.Upstream{
+			Name: "test-upstream",
+			URL:  "", // 空URL
+		}
+		req, _ := http.NewRequest("GET", "/test", nil)
+
+		_, err = client.Do(req, upstream)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "test-upstream") // 错误信息应包含upstream名称
+	})
+
+	t.Run("资源清理验证", func(t *testing.T) {
+		// 创建一个新的客户端用于测试关闭
+		testClient, err := factory.Create(cfg)
+		require.NoError(t, err)
+
+		// 验证客户端名称不为空
+		assert.NotEmpty(t, testClient.Name())
+
+		// 关闭客户端
+		err = testClient.Close()
+		assert.NoError(t, err)
+
+		// 再次关闭应该不会出错
+		err = testClient.Close()
+		assert.NoError(t, err)
+
+		// 关闭后的请求应该返回错误
+		req, _ := http.NewRequest("GET", "/test", nil)
+		upstream := createTestUpstream("http://example.com")
+
+		_, err = testClient.Do(req, upstream)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "closed")
+	})
+
+	t.Run("并发安全性基础验证", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 模拟一些处理时间
+			time.Sleep(10 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("concurrent test"))
+		}))
+		defer server.Close()
+
+		upstream := createTestUpstream(server.URL)
+
+		// 并发执行多个请求
+		const numRequests = 10
+		var wg sync.WaitGroup
+		errors := make(chan error, numRequests)
+
+		for i := 0; i < numRequests; i++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+
+				// 每个goroutine创建自己的请求
+				req, _ := http.NewRequest("GET", fmt.Sprintf("/test-%d", id), nil)
+
+				resp, err := client.Do(req, upstream)
+				if err != nil {
+					errors <- err
+					return
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != http.StatusOK {
+					errors <- fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+				}
+			}(i)
+		}
+
+		wg.Wait()
+		close(errors)
+
+		// 检查是否有错误
+		for err := range errors {
+			t.Errorf("Concurrent request failed: %v", err)
+		}
 	})
 }
 

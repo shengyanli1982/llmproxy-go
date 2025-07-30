@@ -179,27 +179,16 @@ func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) err
 	factory := client.NewFactory()
 
 	// 构建客户端配置
-	clientConfig := client.DefaultConfig()
+	var clientConfig *config.HTTPClientConfig
 
 	if group.HTTPClient != nil {
-		if group.HTTPClient.KeepAlive > 0 {
-			clientConfig.IdleConnTimeout = group.HTTPClient.KeepAlive
-		}
-		if group.HTTPClient.Timeout != nil {
-			if group.HTTPClient.Timeout.Connect > 0 {
-				clientConfig.ConnectTimeout = group.HTTPClient.Timeout.Connect
-			}
-			if group.HTTPClient.Timeout.Request > 0 {
-				clientConfig.RequestTimeout = group.HTTPClient.Timeout.Request
-			}
-		}
-		if group.HTTPClient.Retry != nil {
-			clientConfig.EnableRetry = true
-			clientConfig.MaxRetries = group.HTTPClient.Retry.Attempts
-			clientConfig.RetryDelay = group.HTTPClient.Retry.Initial
-		}
-		if group.HTTPClient.Proxy != nil {
-			clientConfig.ProxyURL = group.HTTPClient.Proxy.URL
+		// 如果组配置中有HTTP客户端配置，使用它
+		clientConfig = group.HTTPClient
+	} else {
+		// 否则使用默认配置
+		clientConfig = &config.HTTPClientConfig{
+			Agent:     "LLMProxy/1.0",
+			KeepAlive: 60, // 默认60秒
 		}
 	}
 
