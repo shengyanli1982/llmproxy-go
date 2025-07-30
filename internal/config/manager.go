@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v3"
-	"k8s.io/klog/v2"
 )
 
 // 全局验证器实例，用于配置验证
@@ -64,7 +63,7 @@ func (m *Manager) LoadFromFile(configPath string) error {
 	m.config = &config
 	m.configPath, _ = filepath.Abs(configPath)
 
-	klog.InfoS("Configuration loaded successfully", "path", m.configPath)
+	// 配置加载成功，日志记录由调用者负责
 	return nil
 }
 

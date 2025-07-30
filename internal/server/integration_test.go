@@ -15,12 +15,12 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 )
 
-// TestProxyServer_EndToEnd 端到端集成测试
-// 这个测试验证了整个代理服务器的核心功能
+// TestProxyServer_EndToEnd end-to-end integration test
+// This test verifies the core functionality of the entire proxy server
 func TestProxyServer_EndToEnd(t *testing.T) {
-	t.Log("开始端到端集成测试")
+	t.Log("Starting end-to-end integration test")
 
-	// 创建上游服务器
+	// Create upstream server
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Upstream-Name", "test-upstream")
@@ -31,13 +31,13 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 
 	logger := logr.Discard()
 
-	// 创建服务器配置
+	// Create server configuration
 	httpServerConfig := &config.HTTPServerConfig{
 		Forwards: []config.ForwardConfig{
 			{
 				Name:         "test-forward",
 				Address:      "127.0.0.1",
-				Port:         0, // 使用随机端口
+				Port:         0, // Use random port
 				DefaultGroup: "test-group",
 				Timeout: &config.TimeoutConfig{
 					Idle:  30,
@@ -48,7 +48,7 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 		},
 		Admin: config.AdminConfig{
 			Address: "127.0.0.1",
-			Port:    0, // 使用随机端口
+			Port:    0, // Use random port
 			Timeout: &config.TimeoutConfig{
 				Idle:  30,
 				Read:  15,
@@ -94,7 +94,7 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 	require.NotNil(t, forwardServer)
 
 	proxyURL := fmt.Sprintf("http://127.0.0.1:%d", forwardServer.GetConfig().Port)
-	t.Logf("代理服务器地址: %s", proxyURL)
+	t.Logf("Proxy server address: %s", proxyURL)
 
 	// 测试基本的 GET 请求
 	t.Run("Basic GET Request", func(t *testing.T) {
@@ -115,7 +115,7 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 		assert.Contains(t, responseBody, "GET")
 		assert.Contains(t, responseBody, "/api/test")
 
-		t.Logf("GET 响应: %s", responseBody)
+		t.Logf("GET response: %s", responseBody)
 	})
 
 	// 测试 POST 请求
@@ -135,7 +135,7 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 		assert.Contains(t, responseBody, "POST")
 		assert.Contains(t, responseBody, "/api/create")
 
-		t.Logf("POST 响应: %s", responseBody)
+		t.Logf("POST response: %s", responseBody)
 	})
 
 	// 测试自定义头部
@@ -154,7 +154,7 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "test-upstream", resp.Header.Get("X-Upstream-Name"))
 
-		t.Log("自定义头部测试通过")
+		t.Log("Custom headers test passed")
 	})
 
 	// 测试多个并发请求
@@ -183,18 +183,18 @@ func TestProxyServer_EndToEnd(t *testing.T) {
 		// 等待所有请求完成
 		for i := 0; i < numRequests; i++ {
 			err := <-results
-			assert.NoError(t, err, "并发请求 %d 失败", i)
+			assert.NoError(t, err, "Concurrent request %d failed", i)
 		}
 
-		t.Logf("并发测试完成：%d 个请求全部成功", numRequests)
+		t.Logf("Concurrent test completed: %d requests all successful", numRequests)
 	})
 
-	t.Log("端到端集成测试完成：所有核心功能正常工作")
+	t.Log("End-to-end integration test completed: all core functionality working properly")
 }
 
 // TestProxyServer_Configuration 测试服务器配置功能
 func TestProxyServer_Configuration(t *testing.T) {
-	t.Log("测试服务器配置功能")
+	t.Log("Testing server configuration functionality")
 
 	logger := logr.Discard()
 
@@ -255,5 +255,5 @@ func TestProxyServer_Configuration(t *testing.T) {
 	nonExistentServer := server.GetForwardServer("nonexistent")
 	assert.Nil(t, nonExistentServer)
 
-	t.Log("服务器配置测试完成")
+	t.Log("Server configuration test completed")
 }

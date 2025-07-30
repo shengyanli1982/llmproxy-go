@@ -165,7 +165,7 @@ func TestServer_Integration(t *testing.T) {
 	// 由于 Prometheus 指标重复注册的问题，我们只运行一个核心的集成测试
 	// 这个测试涵盖了最重要的功能：基本代理转发
 
-	t.Log("开始集成测试：验证基本代理转发功能")
+	t.Log("Starting integration test: verifying basic proxy forwarding functionality")
 
 	// 创建上游服务器
 	upstream := createTestUpstream("upstream1", 0, 0)
@@ -180,7 +180,7 @@ func TestServer_Integration(t *testing.T) {
 	require.NotNil(t, forwardServer)
 
 	proxyURL := fmt.Sprintf("http://127.0.0.1:%d", forwardServer.GetConfig().Port)
-	t.Logf("代理服务器地址: %s", proxyURL)
+	t.Logf("Proxy server address: %s", proxyURL)
 
 	// 测试基本的 GET 请求
 	t.Run("Basic GET Request", func(t *testing.T) {
@@ -200,7 +200,7 @@ func TestServer_Integration(t *testing.T) {
 		assert.Contains(t, responseBody, "response from upstream1")
 		assert.Contains(t, responseBody, "request_count")
 
-		t.Logf("响应内容: %s", responseBody)
+		t.Logf("Response content: %s", responseBody)
 	})
 
 	// 测试 POST 请求
