@@ -582,7 +582,14 @@ func (s *ForwardService) Stop() {
 	}
 
 	s.running = false
-	close(s.stopCh)
+
+	// 安全关闭channel
+	select {
+	case <-s.stopCh:
+		// channel已经关闭
+	default:
+		close(s.stopCh)
+	}
 
 	// 清理资源
 	if s.httpClient != nil {

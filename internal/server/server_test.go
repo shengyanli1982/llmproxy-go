@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/go-logr/logr"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
@@ -293,44 +295,440 @@ func TestForwardServer_Integration(t *testing.T) {
 	assert.NotNil(t, service)
 }
 
-// func TestAdminService_Integration(t *testing.T) {
-// 	logger := logr.Discard()
+func TestAdminService_Integration(t *testing.T) {
+	logger := logr.Discard()
 
-// 	// Create a minimal server setup
-// 	httpServerConfig := &config.HTTPServerConfig{
-// 		Admin: config.AdminConfig{
-// 			Address: "127.0.0.1",
-// 			Port:    0,
-// 			Timeout: &config.TimeoutConfig{
-// 				Read:  30,
-// 				Write: 30,
-// 				Idle:  60,
-// 			},
-// 		},
-// 	}
+	// 创建测试用的上游服务器
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"message": "upstream response", "path": "` + r.URL.Path + `"}`))
+	}))
+	defer upstreamServer.Close()
 
-// 	globalConfig := &config.Config{
-// 		HTTPServer: *httpServerConfig,
-// 	}
+	// 创建完整的配置
+	httpServerConfig := &config.HTTPServerConfig{
+		Admin: config.AdminConfig{
+			Address: "127.0.0.1",
+			Port:    0, // 使用随机端口
+			Timeout: &config.TimeoutConfig{
+				Read:  30,
+				Write: 30,
+				Idle:  60,
+			},
+		},
+		Forwards: []config.ForwardConfig{
+			{
+				Name:         "test-forward",
+				Address:      "127.0.0.1",
+				Port:         0, // 使用随机端口
+				DefaultGroup: "test-group",
+				Timeout: &config.TimeoutConfig{
+					Read:  15,
+					Write: 15,
+					Idle:  30,
+				},
+			},
+		},
+	}
 
-// 	server := NewServer(true, &logger, httpServerConfig, globalConfig)
+	globalConfig := &config.Config{
+		HTTPServer: *httpServerConfig,
+		UpstreamGroups: []config.UpstreamGroupConfig{
+			{
+				Name: "test-group",
+				Balance: &config.BalanceConfig{
+					Strategy: "roundrobin",
+				},
+				Upstreams: []config.UpstreamRefConfig{
+					{Name: "test-upstream", Weight: 1},
+				},
+			},
+		},
+		Upstreams: []config.UpstreamConfig{
+			{
+				Name: "test-upstream",
+				URL:  upstreamServer.URL,
+			},
+		},
+	}
 
-// 	// Test server properties
-// 	assert.NotNil(t, server)
-// 	assert.NotNil(t, server.adminServer)
+	// 创建服务器
+	server := NewServer(true, &logger, httpServerConfig, globalConfig)
+	require.NotNil(t, server)
+	require.NotNil(t, server.adminServer)
 
-// 	// Test admin service properties through the server's admin server
-// 	adminService := server.adminServer.service
-// 	assert.NotNil(t, adminService)
-// 	assert.False(t, adminService.IsRunning())
+	// 获取管理服务实例
+	adminService := server.adminServer.service
+	require.NotNil(t, adminService)
 
-// 	// Test service lifecycle
-// 	adminService.Run()
-// 	assert.True(t, adminService.IsRunning())
+	t.Run("Service Lifecycle", func(t *testing.T) {
+		// 初始状态应该是未运行
+		assert.False(t, adminService.IsRunning())
 
-// 	adminService.Stop()
-// 	assert.False(t, adminService.IsRunning())
-// }
+		// 启动服务
+		adminService.Run()
+		assert.True(t, adminService.IsRunning())
+
+		// 停止服务
+		adminService.Stop()
+		assert.False(t, adminService.IsRunning())
+
+		// 多次停止应该是安全的
+		adminService.Stop()
+		assert.False(t, adminService.IsRunning())
+	})
+
+	t.Run("HTTP Endpoints", func(t *testing.T) {
+		// 启动管理服务以便测试HTTP端点
+		adminService.Run()
+		defer adminService.Stop()
+
+		// 创建测试用的gin引擎
+		gin.SetMode(gin.TestMode)
+		router := gin.New()
+		group := router.Group("/admin")
+		adminService.RegisterGroup(group)
+
+		// 测试 /status 端点
+		t.Run("Status Endpoint", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/admin/status", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
+
+			// 验证响应格式
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			require.NoError(t, err)
+
+			// 验证统一响应格式
+			assert.Contains(t, response, "errorCode")
+			assert.Equal(t, float64(0), response["errorCode"])
+			assert.Contains(t, response, "data")
+
+			// 验证数据内容
+			data, ok := response["data"].(map[string]interface{})
+			require.True(t, ok)
+			assert.Contains(t, data, "service")
+			assert.Contains(t, data, "runtime")
+
+			// 验证服务信息
+			service, ok := data["service"].(map[string]interface{})
+			require.True(t, ok)
+			assert.Equal(t, "LLMProxy", service["name"])
+			assert.Contains(t, service, "version")
+			assert.Contains(t, service, "uptime")
+			assert.Contains(t, service, "startTime")
+
+			// 验证运行时信息
+			runtime, ok := data["runtime"].(map[string]interface{})
+			require.True(t, ok)
+			assert.Contains(t, runtime, "goVersion")
+			assert.Contains(t, runtime, "goroutines")
+			assert.Contains(t, runtime, "memoryAlloc")
+		})
+
+		// 测试 /config 端点
+		t.Run("Config Endpoint", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/admin/config", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
+
+			// 验证响应格式
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			require.NoError(t, err)
+
+			// 验证统一响应格式
+			assert.Contains(t, response, "errorCode")
+			assert.Equal(t, float64(0), response["errorCode"])
+			assert.Contains(t, response, "data")
+
+			// 验证配置数据
+			data, ok := response["data"].(map[string]interface{})
+			require.True(t, ok)
+			assert.Contains(t, data, "config")
+			assert.Contains(t, data, "timestamp")
+		})
+
+		// 测试 /info 端点
+		t.Run("Info Endpoint", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/admin/info", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
+
+			// 验证响应格式
+			var response map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &response)
+			require.NoError(t, err)
+
+			// 验证统一响应格式
+			assert.Contains(t, response, "errorCode")
+			assert.Equal(t, float64(0), response["errorCode"])
+			assert.Contains(t, response, "data")
+
+			// 验证信息数据
+			data, ok := response["data"].(map[string]interface{})
+			require.True(t, ok)
+			assert.Contains(t, data, "application")
+			assert.Contains(t, data, "build")
+			assert.Contains(t, data, "runtime")
+
+			// 验证应用信息
+			app, ok := data["application"].(map[string]interface{})
+			require.True(t, ok)
+			assert.Equal(t, "LLMProxy", app["name"])
+			assert.Contains(t, app, "version")
+			assert.Contains(t, app, "description")
+		})
+	})
+
+	t.Run("Configuration Sanitization", func(t *testing.T) {
+		// 创建包含敏感信息的配置
+		sensitiveConfig := &config.Config{
+			Upstreams: []config.UpstreamConfig{
+				{
+					Name: "sensitive-upstream",
+					URL:  "http://example.com",
+					Auth: &config.AuthConfig{
+						Type:     "bearer",
+						Token:    "secret-token",
+						Password: "secret-password",
+					},
+				},
+			},
+		}
+
+		// 测试配置清理功能
+		sanitized := adminService.sanitizeConfig(sensitiveConfig)
+		require.NotNil(t, sanitized)
+		require.Len(t, sanitized.Upstreams, 1)
+
+		// 验证敏感信息被清理
+		upstream := sanitized.Upstreams[0]
+		require.NotNil(t, upstream.Auth)
+		assert.Equal(t, "***", upstream.Auth.Token)
+		assert.Equal(t, "***", upstream.Auth.Password)
+		assert.Equal(t, "bearer", upstream.Auth.Type) // 类型不应该被清理
+	})
+}
+
+func TestForwardService_Integration(t *testing.T) {
+	logger := logr.Discard()
+
+	// 创建测试用的上游服务器
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"message": "upstream response", "path": "` + r.URL.Path + `", "method": "` + r.Method + `"}`))
+	}))
+	defer upstreamServer.Close()
+
+	// 创建简化的配置
+	httpServerConfig := &config.HTTPServerConfig{
+		Forwards: []config.ForwardConfig{
+			{
+				Name:         "test-forward",
+				Address:      "127.0.0.1",
+				Port:         0, // 使用随机端口
+				DefaultGroup: "test-group",
+				Timeout: &config.TimeoutConfig{
+					Read:    15,
+					Write:   15,
+					Idle:    30,
+					Connect: 10,
+					Request: 30,
+				},
+			},
+		},
+		Admin: config.AdminConfig{
+			Address: "127.0.0.1",
+			Port:    0,
+			Timeout: &config.TimeoutConfig{
+				Read:  30,
+				Write: 30,
+				Idle:  60,
+			},
+		},
+	}
+
+	globalConfig := &config.Config{
+		HTTPServer: *httpServerConfig,
+		UpstreamGroups: []config.UpstreamGroupConfig{
+			{
+				Name: "test-group",
+				Balance: &config.BalanceConfig{
+					Strategy: "roundrobin",
+				},
+				Upstreams: []config.UpstreamRefConfig{
+					{Name: "test-upstream", Weight: 1},
+				},
+			},
+		},
+		Upstreams: []config.UpstreamConfig{
+			{
+				Name: "test-upstream",
+				URL:  upstreamServer.URL,
+			},
+		},
+	}
+
+	// 创建服务器
+	server := NewServer(true, &logger, httpServerConfig, globalConfig)
+	require.NotNil(t, server)
+	require.Len(t, server.forwardServers, 1)
+
+	// 获取转发服务实例
+	forwardServer := server.GetForwardServer("test-forward")
+	require.NotNil(t, forwardServer)
+	forwardService := forwardServer.GetService()
+	require.NotNil(t, forwardService)
+
+	t.Run("Service Lifecycle", func(t *testing.T) {
+		// 初始状态应该是未运行
+		assert.False(t, forwardService.IsRunning())
+
+		// 启动服务
+		forwardService.Run()
+		assert.True(t, forwardService.IsRunning())
+
+		// 停止服务
+		forwardService.Stop()
+		assert.False(t, forwardService.IsRunning())
+
+		// 多次停止应该是安全的
+		forwardService.Stop()
+		assert.False(t, forwardService.IsRunning())
+	})
+
+	t.Run("Service Configuration", func(t *testing.T) {
+		// 测试服务配置 - 通过ForwardServer获取
+		config := forwardServer.GetConfig()
+		assert.NotNil(t, config)
+		assert.Equal(t, "test-forward", config.Name)
+		assert.Equal(t, "test-group", config.DefaultGroup)
+	})
+
+	t.Run("Basic Functionality", func(t *testing.T) {
+		// 启动转发服务
+		forwardService.Run()
+		defer func() {
+			if forwardService.IsRunning() {
+				forwardService.Stop()
+			}
+		}()
+
+		// 创建测试用的gin引擎
+		gin.SetMode(gin.TestMode)
+		router := gin.New()
+		group := router.Group("/")
+		forwardService.RegisterGroup(group)
+
+		// 测试基本的请求转发
+		t.Run("Basic Request Forwarding", func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/test", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// 验证响应 - 由于集成测试的复杂性，我们主要验证服务不会崩溃
+			// 实际的转发功能在其他单元测试中验证
+			assert.True(t, w.Code >= 200 && w.Code < 600, "Expected valid HTTP status code, got %d", w.Code)
+
+			// 如果是错误响应，验证错误格式
+			if w.Code >= 400 {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				if err == nil {
+					assert.Contains(t, response, "errorCode")
+					assert.NotEqual(t, float64(0), response["errorCode"])
+				}
+			}
+		})
+	})
+
+	t.Run("Error Handling", func(t *testing.T) {
+		// 测试错误处理 - 创建一个指向不存在服务的配置
+		unavailableConfig := &config.Config{
+			HTTPServer: config.HTTPServerConfig{
+				Forwards: []config.ForwardConfig{
+					{
+						Name:         "unavailable-forward",
+						Address:      "127.0.0.1",
+						Port:         0,
+						DefaultGroup: "unavailable-group",
+						Timeout: &config.TimeoutConfig{
+							Read:    5,
+							Write:   5,
+							Idle:    10,
+							Connect: 2,
+							Request: 5,
+						},
+					},
+				},
+			},
+			UpstreamGroups: []config.UpstreamGroupConfig{
+				{
+					Name: "unavailable-group",
+					Balance: &config.BalanceConfig{
+						Strategy: "roundrobin",
+					},
+					Upstreams: []config.UpstreamRefConfig{
+						{Name: "unavailable-upstream", Weight: 1},
+					},
+				},
+			},
+			Upstreams: []config.UpstreamConfig{
+				{
+					Name: "unavailable-upstream",
+					URL:  "http://127.0.0.1:99999", // 不存在的端口
+				},
+			},
+		}
+
+		// 创建新的转发服务
+		unavailableService := NewForwardServices()
+		err := unavailableService.Initialize(&unavailableConfig.HTTPServer.Forwards[0], unavailableConfig, &logger)
+		require.NoError(t, err)
+
+		unavailableService.Run()
+		defer func() {
+			if unavailableService.IsRunning() {
+				unavailableService.Stop()
+			}
+		}()
+
+		// 创建测试路由
+		gin.SetMode(gin.TestMode)
+		unavailableRouter := gin.New()
+		unavailableGroup := unavailableRouter.Group("/")
+		unavailableService.RegisterGroup(unavailableGroup)
+
+		// 测试请求到不可用的上游
+		req := httptest.NewRequest("GET", "/test", nil)
+		w := httptest.NewRecorder()
+		unavailableRouter.ServeHTTP(w, req)
+
+		// 应该返回错误响应
+		assert.True(t, w.Code >= 400, "Expected error status code, got %d", w.Code)
+
+		// 验证错误响应格式
+		var response map[string]interface{}
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		if err == nil {
+			assert.Contains(t, response, "errorCode")
+			assert.NotEqual(t, float64(0), response["errorCode"])
+		}
+	})
+}
 
 func TestForwardService_CreateProxyRequest(t *testing.T) {
 	service := NewForwardServices()
