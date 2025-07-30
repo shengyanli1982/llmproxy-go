@@ -11,7 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-logr/logr"
-	gotrycatch "github.com/shengyanli1982/go-trycatch"
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/breaker"
@@ -291,25 +290,19 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 func (s *ForwardService) handleForward(c *gin.Context) {
 	startTime := time.Now()
 
-	// 使用go-trycatch进行错误处理
-	gotrycatch.New().
-		Try(func() error {
-			s.processRequest(c, startTime)
-			return nil
-		}).
-		Catch(func(err error) {
-			s.logger.Error(err, "Request processing failed",
-				"method", c.Request.Method,
-				"path", c.Request.URL.Path,
-				"client_ip", c.ClientIP())
+	// 处理请求，如果有错误，直接返回错误响应
+	if err := s.processRequest(c, startTime); err != nil {
+		s.logger.Error(err, "Request processing failed",
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"client_ip", c.ClientIP())
 
-			s.sendErrorResponse(c, http.StatusInternalServerError, "Internal server error")
-		}).
-		Do()
+		s.sendErrorResponse(c, http.StatusInternalServerError, "Internal server error")
+	}
 }
 
 // processRequest 处理请求的核心逻辑
-func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
+func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) error {
 	req := c.Request
 	ctx := req.Context()
 
@@ -318,7 +311,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 	if err != nil {
 		s.logger.Error(err, "Failed to select upstream")
 		s.sendErrorResponse(c, http.StatusServiceUnavailable, "No available upstream")
-		return
+		return fmt.Errorf("failed to select upstream: %w", err)
 	}
 
 	// 2. 检查上游级别的限流
@@ -326,7 +319,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 		if !s.rateLimitMW.AllowUpstream(upstream.Name) {
 			s.logger.V(1).Info("Rate limit exceeded for upstream", "upstream", upstream.Name)
 			s.sendErrorResponse(c, http.StatusTooManyRequests, "Too many requests to upstream service")
-			return
+			return fmt.Errorf("rate limit exceeded for upstream: %s", upstream.Name)
 		}
 	}
 
@@ -334,7 +327,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 	if cb, exists := s.circuitBreakers[upstream.Name]; exists {
 		if cb.State() == gobreaker.StateOpen {
 			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Service temporarily unavailable")
-			return
+			return fmt.Errorf("circuit breaker is open for upstream: %s", upstream.Name)
 		}
 	}
 
@@ -343,7 +336,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 	if err != nil {
 		s.logger.Error(err, "Failed to create proxy request")
 		s.sendErrorResponse(c, http.StatusInternalServerError, "Failed to create proxy request")
-		return
+		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
 	// 5. 执行请求（通过熔断器保护）
@@ -355,7 +348,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 		if err != nil {
 			s.logger.Error(err, "Circuit breaker execution failed", "upstream", upstream.Name)
 			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Upstream service unavailable")
-			return
+			return fmt.Errorf("circuit breaker execution failed for upstream %s: %w", upstream.Name, err)
 		}
 		resp = result.(*http.Response)
 	} else {
@@ -363,7 +356,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 		if err != nil {
 			s.logger.Error(err, "HTTP request failed", "upstream", upstream.Name)
 			s.sendErrorResponse(c, http.StatusBadGateway, "Upstream request failed")
-			return
+			return fmt.Errorf("HTTP request failed for upstream %s: %w", upstream.Name, err)
 		}
 	}
 
@@ -383,6 +376,8 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) {
 		"upstream", upstream.Name,
 		"status", resp.StatusCode,
 		"latency_ms", latency)
+
+	return nil
 }
 
 // createProxyRequest 创建代理请求

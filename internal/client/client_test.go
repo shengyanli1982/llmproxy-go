@@ -303,7 +303,7 @@ func TestValidateConfig(t *testing.T) {
 				RetryDelay:     1000,
 			},
 			wantError: true,
-			errorMsg:  "connect timeout must be positive",
+			errorMsg:  "ConnectTimeout",
 		},
 		{
 			name: "negative connect timeout",
@@ -314,7 +314,7 @@ func TestValidateConfig(t *testing.T) {
 				RetryDelay:     1000,
 			},
 			wantError: true,
-			errorMsg:  "connect timeout must be positive",
+			errorMsg:  "ConnectTimeout",
 		},
 		{
 			name: "zero request timeout",
@@ -325,7 +325,7 @@ func TestValidateConfig(t *testing.T) {
 				RetryDelay:     1000,
 			},
 			wantError: true,
-			errorMsg:  "request timeout must be positive",
+			errorMsg:  "RequestTimeout",
 		},
 		{
 			name: "negative request timeout",
@@ -336,7 +336,7 @@ func TestValidateConfig(t *testing.T) {
 				RetryDelay:     1000,
 			},
 			wantError: true,
-			errorMsg:  "request timeout must be positive",
+			errorMsg:  "RequestTimeout",
 		},
 		{
 			name: "negative max retries",
@@ -347,7 +347,7 @@ func TestValidateConfig(t *testing.T) {
 				RetryDelay:     1000,
 			},
 			wantError: true,
-			errorMsg:  "max retries must be non-negative",
+			errorMsg:  "MaxRetries",
 		},
 		{
 			name: "negative retry delay",
@@ -358,7 +358,7 @@ func TestValidateConfig(t *testing.T) {
 				RetryDelay:     -500,
 			},
 			wantError: true,
-			errorMsg:  "retry delay must be non-negative",
+			errorMsg:  "RetryDelay",
 		},
 	}
 

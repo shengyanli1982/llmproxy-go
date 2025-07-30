@@ -32,8 +32,8 @@ type AdminConfig struct {
 
 // RateLimitConfig 代表限流配置，控制请求频率和突发流量
 type RateLimitConfig struct {
-	PerSecond int `yaml:"perSecond" validate:"min=1"`
-	Burst     int `yaml:"burst" validate:"min=1"`
+	PerSecond int `yaml:"perSecond" validate:"omitempty,min=1"`
+	Burst     int `yaml:"burst" validate:"omitempty,min=1"`
 }
 
 // TimeoutConfig 代表超时配置，定义各种操作的超时时间
@@ -99,7 +99,6 @@ type BalanceConfig struct {
 type HTTPClientConfig struct {
 	Agent     string         `yaml:"agent"`
 	KeepAlive int            `yaml:"keepalive" validate:"min=0,max=600"`
-	Stream    bool           `yaml:"stream"`
 	Timeout   *TimeoutConfig `yaml:"timeout,omitempty"`
 	Retry     *RetryConfig   `yaml:"retry,omitempty"`
 	Proxy     *ProxyConfig   `yaml:"proxy,omitempty"`

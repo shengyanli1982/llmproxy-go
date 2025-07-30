@@ -197,7 +197,6 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 			group.HTTPClient = &HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
 				KeepAlive: 60,
-				Stream:    true,
 				Timeout: &TimeoutConfig{
 					Connect: 10,
 					Request: 300,
