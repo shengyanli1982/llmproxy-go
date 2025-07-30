@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
@@ -113,23 +114,60 @@ func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Re
 
 // prepareRequest 准备HTTP请求
 func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstream) error {
-	// 从URL解析目标地址
+	// 验证upstream URL不为空
 	if upstream.URL == "" {
 		return errors.New("upstream URL cannot be empty")
 	}
 
-	// 直接使用upstream的URL
-	req.URL.Scheme = "http"
-	req.URL.Host = upstream.URL
+	// 解析upstream URL，处理不带scheme的情况
+	var upstreamURL *url.URL
+	var err error
 
-	// 如果URL包含scheme，保持原有设置
-	if len(upstream.URL) > 8 && upstream.URL[:8] == "https://" {
-		req.URL.Scheme = "https"
-		req.URL.Host = upstream.URL[8:]
-	} else if len(upstream.URL) > 7 && upstream.URL[:7] == "http://" {
-		req.URL.Scheme = "http"
-		req.URL.Host = upstream.URL[7:]
+	// 首先尝试直接解析
+	upstreamURL, err = url.Parse(upstream.URL)
+	if err != nil {
+		// 如果解析失败，可能是因为缺少scheme，尝试添加http://前缀
+		upstreamURL, err = url.Parse("http://" + upstream.URL)
+		if err != nil {
+			return fmt.Errorf("invalid upstream URL '%s': %w", upstream.URL, err)
+		}
+	} else if upstreamURL.Scheme == "" {
+		// 如果解析成功但没有scheme，添加http://前缀重新解析
+		upstreamURL, err = url.Parse("http://" + upstream.URL)
+		if err != nil {
+			return fmt.Errorf("invalid upstream URL '%s': %w", upstream.URL, err)
+		}
 	}
+
+	// 验证URL必须包含host
+	if upstreamURL.Host == "" {
+		return fmt.Errorf("upstream URL must include host: %s", upstream.URL)
+	}
+
+	// 设置目标URL的scheme和host
+	req.URL.Scheme = upstreamURL.Scheme
+	req.URL.Host = upstreamURL.Host
+
+	// 实现URL拆分和拼接转发机制
+	// 用户设计思路：用户请求URL拆分成基础URL和路径，然后与upstream URL拼接
+	// 例如：用户请求 http://127.0.0.1:3000/api/v3/chat/completions
+	//      拆分为：基础URL(http://127.0.0.1:3000) + 路径(/api/v3/chat/completions)
+	//      upstream配置：https://ark.cn-beijing.volces.com
+	//      最终转发：https://ark.cn-beijing.volces.com/api/v3/chat/completions
+
+	if upstreamURL.Path != "" && upstreamURL.Path != "/" {
+		// 如果upstream URL包含具体路径，使用upstream的路径（支持完整端点配置）
+		req.URL.Path = upstreamURL.Path
+		// 同时保留upstream URL的查询参数和片段
+		if upstreamURL.RawQuery != "" {
+			req.URL.RawQuery = upstreamURL.RawQuery
+		}
+		if upstreamURL.Fragment != "" {
+			req.URL.Fragment = upstreamURL.Fragment
+		}
+	}
+	// 注意：当upstream URL是基础URL时，我们不需要修改req.URL.Path、RawQuery、Fragment
+	// 它们保持用户请求的原始值，实现了"基础URL + 用户路径"的拼接机制
 
 	// 应用认证（如果配置中有）
 	if upstream.Config != nil && upstream.Config.Auth != nil {

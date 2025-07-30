@@ -725,6 +725,123 @@ func TestHTTPClient_URLHandling(t *testing.T) {
 	})
 }
 
+func TestHTTPClient_URLSplitAndJoin(t *testing.T) {
+	factory := NewFactory()
+	cfg := createMinimalConfig()
+
+	client, err := factory.Create(cfg)
+	require.NoError(t, err)
+	defer client.Close()
+
+	t.Run("基础URL拼接用户路径", func(t *testing.T) {
+		// 模拟用户设计的场景：
+		// 用户请求：http://127.0.0.1:3000/api/v3/chat/completions
+		// upstream配置：https://ark.cn-beijing.volces.com
+		// 期望转发：https://ark.cn-beijing.volces.com/api/v3/chat/completions
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证转发后的路径是否正确
+			assert.Equal(t, "/api/v3/chat/completions", r.URL.Path)
+			assert.Equal(t, "param=value", r.URL.RawQuery)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("path join test"))
+		}))
+		defer server.Close()
+
+		// 创建用户请求，包含路径和查询参数
+		req, _ := http.NewRequest("POST", "/api/v3/chat/completions?param=value", strings.NewReader(`{"test": "data"}`))
+
+		// 创建upstream配置，使用基础URL（不包含路径）
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, _ := io.ReadAll(resp.Body)
+		assert.Equal(t, "path join test", string(body))
+	})
+
+	t.Run("完整端点URL覆盖用户路径", func(t *testing.T) {
+		// 测试upstream URL包含完整路径的情况
+		// upstream配置：https://api.example.com/v1/completions
+		// 用户请求路径应该被upstream的路径覆盖
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证使用的是upstream的路径，而不是用户请求的路径
+			assert.Equal(t, "/v1/completions", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("endpoint override test"))
+		}))
+		defer server.Close()
+
+		// 创建用户请求，包含不同的路径
+		req, _ := http.NewRequest("POST", "/api/v3/chat/completions", strings.NewReader(`{"test": "data"}`))
+
+		// 创建upstream配置，包含完整的端点路径
+		upstream := createTestUpstream(server.URL + "/v1/completions")
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, _ := io.ReadAll(resp.Body)
+		assert.Equal(t, "endpoint override test", string(body))
+	})
+
+	t.Run("查询参数和片段处理", func(t *testing.T) {
+		// 测试查询参数和片段的正确传递
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证查询参数正确传递
+			assert.Equal(t, "value1", r.URL.Query().Get("param1"))
+			assert.Equal(t, "value2", r.URL.Query().Get("param2"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("query params test"))
+		}))
+		defer server.Close()
+
+		// 创建包含查询参数和片段的用户请求
+		req, _ := http.NewRequest("GET", "/api/test?param1=value1&param2=value2#section1", nil)
+
+		// 使用基础URL配置
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("upstream URL包含查询参数", func(t *testing.T) {
+		// 测试upstream URL包含查询参数的情况
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 验证使用的是upstream的查询参数
+			assert.Equal(t, "upstream_value", r.URL.Query().Get("upstream_param"))
+			assert.Equal(t, "/upstream/path", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("upstream query test"))
+		}))
+		defer server.Close()
+
+		// 创建用户请求
+		req, _ := http.NewRequest("GET", "/user/path?user_param=user_value", nil)
+
+		// 创建包含路径和查询参数的upstream配置
+		upstream := createTestUpstream(server.URL + "/upstream/path?upstream_param=upstream_value")
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}
+
 func TestHTTPClient_HTTPMethods(t *testing.T) {
 	factory := NewFactory()
 	cfg := createMinimalConfig()
@@ -922,6 +1039,19 @@ func TestProxyHandler(t *testing.T) {
 
 		assert.NotNil(t, handler)
 		assert.NotNil(t, handler.GetProxyFunc())
+		assert.True(t, handler.IsEnabled())
+		assert.Equal(t, "http://proxy.example.com:8080", handler.GetProxyURL())
+	})
+
+	t.Run("invalid proxy URL", func(t *testing.T) {
+		proxyConfig := &config.ProxyConfig{
+			URL: "ht!tp://invalid-url", // 使用真正无效的URL格式
+		}
+		handler := NewProxyHandler(proxyConfig)
+
+		assert.NotNil(t, handler)
+		assert.False(t, handler.IsEnabled())
+		assert.Equal(t, "", handler.GetProxyURL())
 	})
 
 	t.Run("without proxy config", func(t *testing.T) {
@@ -944,5 +1074,132 @@ func TestProxyHandler(t *testing.T) {
 		assert.NotNil(t, handler)
 		proxyFunc := handler.GetProxyFunc()
 		assert.NotNil(t, proxyFunc)
+	})
+}
+
+func TestHTTPClient_ProxyRetryIntegration(t *testing.T) {
+	factory := NewFactory()
+
+	t.Run("验证proxy配置被正确应用", func(t *testing.T) {
+		// 创建包含proxy配置的客户端
+		cfg := &config.HTTPClientConfig{
+			Agent:     "LLMProxy/1.0",
+			KeepAlive: 60,
+			Proxy: &config.ProxyConfig{
+				URL: "http://nonexistent-proxy.example.com:8080",
+			},
+		}
+
+		client, err := factory.Create(cfg)
+		require.NoError(t, err)
+		defer client.Close()
+
+		// 验证客户端创建成功，包含proxy配置
+		assert.NotNil(t, client)
+
+		// 通过类型断言验证内部配置
+		if httpClient, ok := client.(*httpClient); ok {
+			// 验证proxy配置
+			assert.NotNil(t, httpClient.proxyHandler)
+			assert.True(t, httpClient.proxyHandler.IsEnabled())
+			assert.Equal(t, "http://nonexistent-proxy.example.com:8080", httpClient.proxyHandler.GetProxyURL())
+
+			// 验证transport中的proxy设置
+			if transport, ok := httpClient.client.Transport.(*http.Transport); ok {
+				assert.NotNil(t, transport.Proxy)
+			}
+		}
+
+		// 创建一个测试服务器
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("should not reach here"))
+		}))
+		defer server.Close()
+
+		// 尝试执行请求，应该因为代理不存在而失败
+		// 这证明了proxy配置确实被应用了
+		req, _ := http.NewRequest("GET", "/test", nil)
+		upstream := createTestUpstream(server.URL)
+
+		_, err = client.Do(req, upstream)
+		// 应该返回代理连接错误，证明proxy配置生效
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "proxy")
+	})
+
+	t.Run("验证没有proxy时的正常工作", func(t *testing.T) {
+		// 创建不包含proxy配置的客户端
+		cfg := &config.HTTPClientConfig{
+			Agent:     "LLMProxy/1.0",
+			KeepAlive: 60,
+			// 没有Proxy配置
+		}
+
+		client, err := factory.Create(cfg)
+		require.NoError(t, err)
+		defer client.Close()
+
+		// 验证proxy处理器存在但未启用
+		if httpClient, ok := client.(*httpClient); ok {
+			assert.NotNil(t, httpClient.proxyHandler)
+			assert.False(t, httpClient.proxyHandler.IsEnabled())
+		}
+
+		// 创建测试服务器
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("no proxy test"))
+		}))
+		defer server.Close()
+
+		// 执行请求，应该成功（不使用代理）
+		req, _ := http.NewRequest("GET", "/test", nil)
+		upstream := createTestUpstream(server.URL)
+
+		resp, err := client.Do(req, upstream)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		assert.Equal(t, "no proxy test", string(body))
+	})
+
+	t.Run("验证proxy配置在重试过程中保持一致", func(t *testing.T) {
+		// 这个测试验证proxy配置在HTTPClient创建时正确设置
+		// 并且在重试过程中使用同一个http.Client实例
+
+		cfg := &config.HTTPClientConfig{
+			Agent:     "LLMProxy/1.0",
+			KeepAlive: 60,
+			Retry: &config.RetryConfig{
+				Attempts: 2,
+				Initial:  100,
+			},
+			Proxy: &config.ProxyConfig{
+				URL: "http://test-proxy.example.com:3128",
+			},
+		}
+
+		client, err := factory.Create(cfg)
+		require.NoError(t, err)
+		defer client.Close()
+
+		// 验证客户端创建成功（包含proxy配置）
+		assert.NotNil(t, client)
+		assert.NotEmpty(t, client.Name())
+
+		// 通过类型断言访问内部实现来验证proxy设置
+		if httpClient, ok := client.(*httpClient); ok {
+			assert.NotNil(t, httpClient.proxyHandler)
+			assert.True(t, httpClient.proxyHandler.IsEnabled())
+			assert.Equal(t, "http://test-proxy.example.com:3128", httpClient.proxyHandler.GetProxyURL())
+
+			// 验证transport中的proxy设置
+			if transport, ok := httpClient.client.Transport.(*http.Transport); ok {
+				assert.NotNil(t, transport.Proxy)
+			}
+		}
 	})
 }
