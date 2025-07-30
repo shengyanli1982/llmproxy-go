@@ -8,7 +8,6 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.27.0
-	github.com/shengyanli1982/go-trycatch v0.0.3
 	github.com/shengyanli1982/gs v0.1.5
 	github.com/shengyanli1982/law v0.1.18
 	github.com/shengyanli1982/orbit v0.1.13

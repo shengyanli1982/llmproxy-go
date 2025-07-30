@@ -9,6 +9,7 @@ import (
 
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
+	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/shengyanli1982/llmproxy-go/internal/headers"
 )
 
@@ -27,7 +28,7 @@ type httpClient struct {
 	pool         *ConnectionPool
 	retryHandler *RetryHandler
 	proxyHandler *ProxyHandler
-	config       *Config
+	config       *config.HTTPClientConfig
 	closed       bool
 
 	// 依赖的模块
@@ -36,29 +37,31 @@ type httpClient struct {
 }
 
 // NewHTTPClient 创建新的HTTP客户端实例
-func NewHTTPClient(config *Config) (HTTPClient, error) {
-	if config == nil {
-		config = DefaultConfig()
-	}
-
-	// 验证配置
-	if err := validateConfig(config); err != nil {
-		return nil, err
-	}
-
+func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 	// 创建连接池
-	pool := NewConnectionPool(config)
+	pool := NewConnectionPool(cfg)
 
 	// 创建重试处理器
-	retryHandler := NewRetryHandler(config)
+	retryHandler := NewRetryHandler(cfg)
 
 	// 创建代理处理器
-	proxyHandler := NewProxyHandlerFromURL(config.ProxyURL)
+	var proxyHandler *ProxyHandler
+	if cfg.Proxy != nil {
+		proxyHandler = NewProxyHandler(cfg.Proxy)
+	} else {
+		proxyHandler = NewProxyHandlerFromURL("")
+	}
+
+	// 获取请求超时时间
+	requestTimeout := 60 // 默认60秒
+	if cfg.Timeout != nil {
+		requestTimeout = cfg.Timeout.Request
+	}
 
 	// 创建HTTP客户端
 	client := &http.Client{
 		Transport: pool.GetTransport(),
-		Timeout:   time.Duration(config.RequestTimeout) * time.Second,
+		Timeout:   time.Duration(requestTimeout) * time.Second,
 	}
 
 	// 设置代理
@@ -72,7 +75,7 @@ func NewHTTPClient(config *Config) (HTTPClient, error) {
 		pool:           pool,
 		retryHandler:   retryHandler,
 		proxyHandler:   proxyHandler,
-		config:         config,
+		config:         cfg,
 		closed:         false,
 		authFactory:    auth.NewFactory(),
 		headerOperator: headers.NewOperator(),
@@ -160,10 +163,11 @@ func (c *httpClient) setDefaultHeaders(req *http.Request) {
 	}
 
 	// 设置Connection头部
-	if c.config.EnableKeepAlive {
-		req.Header.Set("Connection", "keep-alive")
-	} else {
+	// 如果KeepAlive为0，表示禁用Keep-Alive
+	if c.config.KeepAlive == 0 {
 		req.Header.Set("Connection", "close")
+	} else {
+		req.Header.Set("Connection", "keep-alive")
 	}
 
 	// 保持原始Host头部用于代理
@@ -191,21 +195,4 @@ func (c *httpClient) Close() error {
 // Name 获取客户端名称
 func (c *httpClient) Name() string {
 	return c.name
-}
-
-// validateConfig 验证客户端配置
-func validateConfig(config *Config) error {
-	if config.ConnectTimeout <= 0 {
-		return fmt.Errorf("%w: connect timeout must be positive", ErrInvalidTimeout)
-	}
-	if config.RequestTimeout <= 0 {
-		return fmt.Errorf("%w: request timeout must be positive", ErrInvalidTimeout)
-	}
-	if config.MaxRetries < 0 {
-		return errors.New("max retries must be non-negative")
-	}
-	if config.RetryDelay < 0 {
-		return errors.New("retry delay must be non-negative")
-	}
-	return nil
 }

@@ -6,56 +6,71 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/config"
 )
 
 // ConnectionPool 连接池管理器
 type ConnectionPool struct {
 	transport *http.Transport
-	config    *Config
+	config    *config.HTTPClientConfig
 }
 
 // NewConnectionPool 创建新的连接池实例
-func NewConnectionPool(config *Config) *ConnectionPool {
+func NewConnectionPool(cfg *config.HTTPClientConfig) *ConnectionPool {
 	// 创建自定义Transport
 	transport := &http.Transport{
-		// 连接配置
-		MaxIdleConns:        config.MaxIdleConns,
-		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
-		MaxConnsPerHost:     config.MaxConnsPerHost,
-		IdleConnTimeout:     time.Duration(config.IdleConnTimeout) * time.Second,
-
-		// 拨号配置
-		DialContext: (&net.Dialer{
-			Timeout:   time.Duration(config.ConnectTimeout) * time.Second,
-			KeepAlive: 90 * time.Second,
-		}).DialContext,
-
 		// TLS配置
 		TLSHandshakeTimeout: 30 * time.Second,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: false,
 		},
 
-		// Keep-Alive配置
-		DisableKeepAlives: !config.EnableKeepAlive,
+		// Keep-Alive配置 - 如果KeepAlive为0，禁用Keep-Alive
+		DisableKeepAlives: cfg.KeepAlive == 0,
 
-		// 响应头超时
-		ResponseHeaderTimeout: time.Duration(config.RequestTimeout) * time.Second,
+		// 拨号配置
+		DialContext: (&net.Dialer{
+			KeepAlive: time.Duration(cfg.KeepAlive) * time.Second,
+		}).DialContext,
 
 		// 期望继续超时
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	// 设置连接池配置
+	if cfg.Connect != nil {
+		transport.MaxIdleConns = cfg.Connect.IdleTotal
+		transport.MaxIdleConnsPerHost = cfg.Connect.IdlePerHost
+		transport.MaxConnsPerHost = cfg.Connect.MaxPerHost
+	}
+
+	// 设置超时配置
+	if cfg.Timeout != nil {
+		if cfg.Timeout.Connect > 0 {
+			transport.DialContext = (&net.Dialer{
+				Timeout:   time.Duration(cfg.Timeout.Connect) * time.Second,
+				KeepAlive: time.Duration(cfg.KeepAlive) * time.Second,
+			}).DialContext
+		}
+		if cfg.Timeout.Request > 0 {
+			transport.ResponseHeaderTimeout = time.Duration(cfg.Timeout.Request) * time.Second
+		}
+		if cfg.Timeout.Idle > 0 {
+			transport.IdleConnTimeout = time.Duration(cfg.Timeout.Idle) * time.Second
+		}
+	}
+
 	// 配置代理
-	if config.ProxyURL != "" {
-		if proxyURL, err := url.Parse(config.ProxyURL); err == nil {
+	if cfg.Proxy != nil {
+		if proxyURL, err := url.Parse(cfg.Proxy.URL); err == nil {
 			transport.Proxy = http.ProxyURL(proxyURL)
 		}
 	}
 
 	return &ConnectionPool{
 		transport: transport,
-		config:    config,
+		config:    cfg,
 	}
 }
 

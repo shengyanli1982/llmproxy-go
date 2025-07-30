@@ -2,6 +2,8 @@ package client
 
 import (
 	"errors"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/config"
 )
 
 // 工厂相关错误定义
@@ -18,10 +20,10 @@ func NewFactory() HTTPClientFactory {
 }
 
 // Create 根据配置创建HTTP客户端
-func (f *clientFactory) Create(config *Config) (HTTPClient, error) {
-	if config == nil {
+func (f *clientFactory) Create(cfg *config.HTTPClientConfig) (HTTPClient, error) {
+	if cfg == nil {
 		return nil, ErrNilConfig
 	}
 
-	return NewHTTPClient(config)
+	return NewHTTPClient(cfg)
 }

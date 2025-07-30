@@ -6,30 +6,28 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/shengyanli1982/retry"
 )
 
 // RetryHandler 重试处理器
 type RetryHandler struct {
-	config     *Config
+	config     *config.HTTPClientConfig
 	retryAgent *retry.Retry
 }
 
 // NewRetryHandler 创建新的重试处理器实例
-func NewRetryHandler(config *Config) *RetryHandler {
+func NewRetryHandler(cfg *config.HTTPClientConfig) *RetryHandler {
 	// 创建重试配置
 	retryConfig := retry.NewConfig()
 
-	if config.EnableRetry {
+	// 检查是否启用重试（如果有Retry配置段，则启用重试）
+	if cfg.Retry != nil {
 		// 设置重试次数
-		if config.MaxRetries > 0 {
-			retryConfig = retryConfig.WithAttempts(uint64(config.MaxRetries))
-		}
+		retryConfig = retryConfig.WithAttempts(uint64(cfg.Retry.Attempts))
 
 		// 设置初始延迟
-		if config.RetryDelay > 0 {
-			retryConfig = retryConfig.WithInitDelay(time.Duration(config.RetryDelay) * time.Millisecond)
-		}
+		retryConfig = retryConfig.WithInitDelay(time.Duration(cfg.Retry.Initial) * time.Millisecond)
 
 		// 设置指数退避因子
 		retryConfig = retryConfig.WithFactor(2.0)
@@ -47,7 +45,7 @@ func NewRetryHandler(config *Config) *RetryHandler {
 			return true
 		})
 	} else {
-		// 如果禁用重试，设置重试次数为1（即不重试）
+		// 如果没有重试配置，设置重试次数为1（即不重试）
 		retryConfig = retryConfig.WithAttempts(1)
 	}
 
@@ -55,14 +53,14 @@ func NewRetryHandler(config *Config) *RetryHandler {
 	retryAgent := retry.New(retryConfig)
 
 	return &RetryHandler{
-		config:     config,
+		config:     cfg,
 		retryAgent: retryAgent,
 	}
 }
 
 // DoWithRetry 执行带重试的HTTP请求
 func (r *RetryHandler) DoWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*http.Response, error) {
-	if !r.config.EnableRetry {
+	if r.config.Retry == nil {
 		// 未启用重试，直接执行
 		return fn()
 	}
@@ -121,15 +119,23 @@ func (r *RetryHandler) shouldRetry(resp *http.Response) bool {
 
 // IsEnabled 检查重试是否启用
 func (r *RetryHandler) IsEnabled() bool {
-	return r.config.EnableRetry
+	return r.config.Retry != nil
 }
 
 // GetConfig 获取重试配置
 func (r *RetryHandler) GetConfig() map[string]interface{} {
+	if r.config.Retry == nil {
+		return map[string]interface{}{
+			"enabled":     false,
+			"max_retries": 0,
+			"retry_delay": 0,
+		}
+	}
+
 	return map[string]interface{}{
-		"enabled":     r.config.EnableRetry,
-		"max_retries": r.config.MaxRetries,
-		"retry_delay": r.config.RetryDelay,
+		"enabled":     true,
+		"max_retries": r.config.Retry.Attempts,
+		"retry_delay": r.config.Retry.Initial,
 	}
 }
 
