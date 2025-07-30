@@ -10,6 +10,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
+	"github.com/shengyanli1982/llmproxy-go/internal/response"
 )
 
 // TestGinRateLimitMiddleware 测试gin限流中间件
@@ -29,7 +30,7 @@ func TestGinRateLimitMiddleware(t *testing.T) {
 		router := gin.New()
 		router.Use(service.ginRateLimitMiddleware())
 		router.GET("/test", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"message": "success"})
+			response.OK(c, map[string]interface{}{"message": "success"})
 		})
 
 		// 发送请求
@@ -61,7 +62,7 @@ func TestGinRateLimitMiddleware(t *testing.T) {
 		router := gin.New()
 		router.Use(service.ginRateLimitMiddleware())
 		router.GET("/test", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"message": "success"})
+			response.OK(c, map[string]interface{}{"message": "success"})
 		})
 
 		// 发送请求
@@ -94,7 +95,7 @@ func TestGinRateLimitMiddleware(t *testing.T) {
 		router := gin.New()
 		router.Use(service.ginRateLimitMiddleware())
 		router.GET("/test", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"message": "success"})
+			response.OK(c, map[string]interface{}{"message": "success"})
 		})
 
 		// 发送第一个请求（应该成功）
@@ -111,7 +112,10 @@ func TestGinRateLimitMiddleware(t *testing.T) {
 		router.ServeHTTP(w2, req2)
 		assert.Equal(t, http.StatusTooManyRequests, w2.Code)
 
-		// 验证错误响应内容
-		assert.Contains(t, w2.Body.String(), "rate limit exceeded")
+		// 验证错误响应内容 - 检查新的响应格式
+		responseBody := w2.Body.String()
+		assert.Contains(t, responseBody, "errorCode")
+		assert.Contains(t, responseBody, "1004")
+		assert.Contains(t, responseBody, "too many requests from this IP")
 	})
 }

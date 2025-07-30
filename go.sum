@@ -89,8 +89,6 @@ github.com/prometheus/procfs v0.12.0/go.mod h1:pcuDEFsWDnvcgNzo4EEweacyhjeA9Zk3c
 github.com/rogpeppe/go-internal v1.11.0 h1:cWPaGQEPrBb5/AsnsZesgZZ9yb1OQ+GOISoDNXVBh4M=
 github.com/rogpeppe/go-internal v1.11.0/go.mod h1:ddIwULY96R17DhadqLgMfk9H9tvdUzkipdSkR5nkCZA=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/shengyanli1982/go-trycatch v0.0.3 h1:0Kz8OM0BwTrsFW5gCYTyoEVEnppSemAa5ko9+BMrq54=
-github.com/shengyanli1982/go-trycatch v0.0.3/go.mod h1:mjkXi9eiZcLWxZ1WnrlPkbzVL2DVmCpkCldcLGDESBE=
 github.com/shengyanli1982/gs v0.1.5 h1:nov5bn8fffCR0Uz29ZiIsjiKxjw9o5p/PmZ01NlM6k8=
 github.com/shengyanli1982/gs v0.1.5/go.mod h1:D71BApttgRbpQomMPWOGQQaPJTypfvsbktSIBzei0yU=
 github.com/shengyanli1982/law v0.1.18 h1:Owtto1SazmyY3XIuEhMWlgG+rNcmMdnaGSkSPIdc1Pw=
@@ -99,6 +97,8 @@ github.com/shengyanli1982/orbit v0.1.13 h1:5D22wvbPmIpoQlAy2XRIbxC0lu60j/rPv0bkO
 github.com/shengyanli1982/orbit v0.1.13/go.mod h1:tieZUyWInU+vusvlUKjq8vRBIdGEPaGJAUdNYh1pdCs=
 github.com/shengyanli1982/retry v0.1.9 h1:xfjTRAQ9PlZGsuaDwTUOXybgWAH75YUEMLmIme1XFxQ=
 github.com/shengyanli1982/retry v0.1.9/go.mod h1:1C5LUAG0iRudzPTlvA5QHuzZ8JYDLeX0ikyYu1K4Dak=
+github.com/shengyanli1982/toolkit/pkg/httptool v0.0.0-20240829143620-c99268455b35 h1:2FKGiROeDZVMHj2My05kBIdzH84Sb1VpOzdkYAql0Ew=
+github.com/shengyanli1982/toolkit/pkg/httptool v0.0.0-20240829143620-c99268455b35/go.mod h1:+YUDiw2G+DcmimgJPhvlwKrsKfZy+IeyeFczbxReUY0=
 github.com/sony/gobreaker v1.0.0 h1:feX5fGGXSl3dYd4aHZItw+FpHLvvoaqkawKjVNiFMNQ=
 github.com/sony/gobreaker v1.0.0/go.mod h1:ZKptC7FHNvhBz7dN2LGjPVBz2sZJmc0/PkyDJOjmxWY=
 github.com/spf13/cobra v1.9.1 h1:CXSaggrXdbHK9CF+8ywj8Amf7PBRmPCOJugH954Nnlo=

@@ -18,13 +18,14 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/shengyanli1982/llmproxy-go/internal/headers"
 	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
+	"github.com/shengyanli1982/llmproxy-go/internal/response"
 	"github.com/sony/gobreaker"
 )
 
 const (
-	// MaxRequestBodySize 定义请求体的最大大小（32MB）
+	// MaxRequestBodySize 定义请求体的最大大小（64MB）
 	// 防止过大的请求体导致内存耗尽
-	MaxRequestBodySize = 32 << 20 // 32MB
+	MaxRequestBodySize = 64 << 20 // 64MB
 )
 
 // ForwardService 代表转发服务，处理客户端请求转发逻辑
@@ -258,11 +259,13 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 		if !s.rateLimitMW.AllowRequest(c.Request) {
 			clientIP := s.getClientIP(c.Request)
 			s.logger.V(1).Info("Rate limit exceeded for IP", "ip", clientIP)
-			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":   "rate limit exceeded",
-				"message": "too many requests from this IP",
-				"code":    "RATE_LIMIT_EXCEEDED",
-			})
+			detail := map[string]interface{}{
+				"code": "RATE_LIMIT_EXCEEDED",
+				"ip":   clientIP,
+			}
+			response.Error(response.CodeRateLimit, "too many requests from this IP").
+				WithDetail(detail).
+				JSON(c, http.StatusTooManyRequests)
 			c.Abort()
 			return
 		}
@@ -495,11 +498,34 @@ func (s *ForwardService) forwardRegularResponse(c *gin.Context, resp *http.Respo
 
 // sendErrorResponse 发送错误响应
 func (s *ForwardService) sendErrorResponse(c *gin.Context, statusCode int, message string) {
-	c.JSON(statusCode, gin.H{
+	var code int64
+	switch statusCode {
+	case http.StatusTooManyRequests:
+		code = response.CodeRateLimit
+	case http.StatusServiceUnavailable:
+		code = response.CodeServiceUnavailable
+	case http.StatusBadGateway:
+		code = response.CodeBadGateway
+	case http.StatusGatewayTimeout:
+		code = response.CodeGatewayTimeout
+	case http.StatusBadRequest:
+		code = response.CodeBadRequest
+	case http.StatusUnauthorized:
+		code = response.CodeUnauthorized
+	case http.StatusForbidden:
+		code = response.CodeForbidden
+	case http.StatusNotFound:
+		code = response.CodeNotFound
+	default:
+		code = response.CodeInternalError
+	}
+
+	detail := map[string]interface{}{
 		"error":     http.StatusText(statusCode),
-		"message":   message,
 		"timestamp": time.Now().Unix(),
-	})
+	}
+
+	response.Error(code, message).WithDetail(detail).JSON(c, statusCode)
 }
 
 // getClientIP 获取客户端IP

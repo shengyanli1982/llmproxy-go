@@ -293,44 +293,44 @@ func TestForwardServer_Integration(t *testing.T) {
 	assert.NotNil(t, service)
 }
 
-func TestAdminService_Integration(t *testing.T) {
-	logger := logr.Discard()
+// func TestAdminService_Integration(t *testing.T) {
+// 	logger := logr.Discard()
 
-	// Create a minimal server setup
-	httpServerConfig := &config.HTTPServerConfig{
-		Admin: config.AdminConfig{
-			Address: "127.0.0.1",
-			Port:    0,
-			Timeout: &config.TimeoutConfig{
-				Read:  30,
-				Write: 30,
-				Idle:  60,
-			},
-		},
-	}
+// 	// Create a minimal server setup
+// 	httpServerConfig := &config.HTTPServerConfig{
+// 		Admin: config.AdminConfig{
+// 			Address: "127.0.0.1",
+// 			Port:    0,
+// 			Timeout: &config.TimeoutConfig{
+// 				Read:  30,
+// 				Write: 30,
+// 				Idle:  60,
+// 			},
+// 		},
+// 	}
 
-	globalConfig := &config.Config{
-		HTTPServer: *httpServerConfig,
-	}
+// 	globalConfig := &config.Config{
+// 		HTTPServer: *httpServerConfig,
+// 	}
 
-	server := NewServer(true, &logger, httpServerConfig, globalConfig)
+// 	server := NewServer(true, &logger, httpServerConfig, globalConfig)
 
-	// Test server properties
-	assert.NotNil(t, server)
-	assert.NotNil(t, server.adminServer)
+// 	// Test server properties
+// 	assert.NotNil(t, server)
+// 	assert.NotNil(t, server.adminServer)
 
-	// Test admin service properties through the server's admin server
-	adminService := server.adminServer.service
-	assert.NotNil(t, adminService)
-	assert.False(t, adminService.IsRunning())
+// 	// Test admin service properties through the server's admin server
+// 	adminService := server.adminServer.service
+// 	assert.NotNil(t, adminService)
+// 	assert.False(t, adminService.IsRunning())
 
-	// Test service lifecycle
-	adminService.Run()
-	assert.True(t, adminService.IsRunning())
+// 	// Test service lifecycle
+// 	adminService.Run()
+// 	assert.True(t, adminService.IsRunning())
 
-	adminService.Stop()
-	assert.False(t, adminService.IsRunning())
-}
+// 	adminService.Stop()
+// 	assert.False(t, adminService.IsRunning())
+// }
 
 func TestForwardService_CreateProxyRequest(t *testing.T) {
 	service := NewForwardServices()

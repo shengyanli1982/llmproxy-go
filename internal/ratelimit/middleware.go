@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"net/http"
 
+	"github.com/shengyanli1982/llmproxy-go/internal/response"
 	"github.com/shengyanli1982/orbit"
 )
 
@@ -32,10 +33,12 @@ func (m *RateLimitMiddleware) Middleware() orbit.HandlerFunc {
 
 		// IP级别限流检查
 		if !m.ipLimiter.Allow(c.Request) {
-			c.JSON(http.StatusTooManyRequests, map[string]interface{}{
-				"error":   "rate limit exceeded",
-				"message": "too many requests from this IP",
-			})
+			detail := map[string]interface{}{
+				"type": "ipLimit",
+			}
+			response.Error(response.CodeRateLimit, "too many requests from this IP").
+				WithDetail(detail).
+				JSON(c, http.StatusTooManyRequests)
 			c.Abort()
 			return
 		}
@@ -43,10 +46,13 @@ func (m *RateLimitMiddleware) Middleware() orbit.HandlerFunc {
 		// 上游级别限流检查（如果有指定上游）
 		if upstream := c.GetString("upstream"); upstream != "" {
 			if !m.upstreamLimiter.Allow(upstream) {
-				c.JSON(http.StatusTooManyRequests, map[string]interface{}{
-					"error":   "rate limit exceeded",
-					"message": "too many requests to this upstream",
-				})
+				detail := map[string]interface{}{
+					"type":     "upstreamLimit",
+					"upstream": upstream,
+				}
+				response.Error(response.CodeUpstreamLimit, "too many requests to this upstream").
+					WithDetail(detail).
+					JSON(c, http.StatusTooManyRequests)
 				c.Abort()
 				return
 			}
