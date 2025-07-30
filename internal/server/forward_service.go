@@ -243,7 +243,8 @@ func (s *ForwardService) RegisterGroup(g *gin.RouterGroup) {
 	}
 
 	// 注册转发处理器，处理所有请求
-	g.Any("/*path", s.handleForward)
+	g.POST("/*path", s.handleForward).
+		GET("/*path", s.handleForward)
 }
 
 // ginRateLimitMiddleware 将orbit限流中间件转换为gin中间件

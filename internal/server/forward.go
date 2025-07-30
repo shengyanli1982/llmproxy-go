@@ -42,6 +42,9 @@ func NewForwardServer(debug bool, logger *logr.Logger, config *config.ForwardCon
 
 	// 创建引擎选项
 	opts := orbit.EmptyOptions()
+	if !debug {
+		cfg.WithRelease()
+	}
 
 	// 创建 HTTP 引擎
 	engine := orbit.NewEngine(cfg, opts)

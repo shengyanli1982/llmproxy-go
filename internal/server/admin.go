@@ -40,9 +40,10 @@ func NewAdminServer(debug bool, logger *logr.Logger, config *config.AdminConfig,
 		WithHttpWriteTimeout(uint32(config.Timeout.Write))
 
 	// 创建引擎选项
-	opts := orbit.ReleaseOptions()
-	if debug {
-		opts = orbit.DebugOptions()
+	opts := orbit.DebugOptions()
+	if !debug {
+		opts = orbit.ReleaseOptions()
+		cfg.WithRelease()
 	}
 
 	// 创建 HTTP 引擎
