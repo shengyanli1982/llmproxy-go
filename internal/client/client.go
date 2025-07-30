@@ -58,7 +58,7 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 	}
 
 	// 获取请求超时时间
-	requestTimeout := 60 // 默认60秒
+	requestTimeout := 60000 // 默认60000毫秒
 	if cfg.Timeout != nil {
 		requestTimeout = cfg.Timeout.Request
 	}
@@ -66,7 +66,7 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 	// 创建HTTP客户端
 	client := &http.Client{
 		Transport: pool.GetTransport(),
-		Timeout:   time.Duration(requestTimeout) * time.Second,
+		Timeout:   time.Duration(requestTimeout) * time.Millisecond,
 	}
 
 	// 设置代理

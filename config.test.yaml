@@ -21,9 +21,9 @@ httpServer:
         burst: 100
       # 连接超时测试
       timeout:
-        idle: 120
-        read: 60
-        write: 60
+        idle: 120000
+        read: 60000
+        write: 60000
 
   #-----------------------------------------------------------------------------
   # 管理服务 (admin)
@@ -32,9 +32,9 @@ httpServer:
     port: 9003
     address: "0.0.0.0"
     timeout:
-      idle: 60
-      read: 30
-      write: 30
+      idle: 60000
+      read: 30000
+      write: 30000
 
 #-------------------------------------------------------------------------------
 # 上游服务定义 (upstreams)
@@ -56,7 +56,7 @@ upstreams:
     # 熔断器测试
     breaker:
       threshold: 0.6
-      cooldown: 30
+      cooldown: 30000
     # 限速器测试
     ratelimit:
       perSecond: 20

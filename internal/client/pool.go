@@ -49,15 +49,15 @@ func NewConnectionPool(cfg *config.HTTPClientConfig) *ConnectionPool {
 	if cfg.Timeout != nil {
 		if cfg.Timeout.Connect > 0 {
 			transport.DialContext = (&net.Dialer{
-				Timeout:   time.Duration(cfg.Timeout.Connect) * time.Second,
-				KeepAlive: time.Duration(cfg.KeepAlive) * time.Second,
+				Timeout:   time.Duration(cfg.Timeout.Connect) * time.Millisecond,
+				KeepAlive: time.Duration(cfg.KeepAlive) * time.Millisecond,
 			}).DialContext
 		}
 		if cfg.Timeout.Request > 0 {
-			transport.ResponseHeaderTimeout = time.Duration(cfg.Timeout.Request) * time.Second
+			transport.ResponseHeaderTimeout = time.Duration(cfg.Timeout.Request) * time.Millisecond
 		}
 		if cfg.Timeout.Idle > 0 {
-			transport.IdleConnTimeout = time.Duration(cfg.Timeout.Idle) * time.Second
+			transport.IdleConnTimeout = time.Duration(cfg.Timeout.Idle) * time.Millisecond
 		}
 	}
 

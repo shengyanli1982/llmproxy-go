@@ -210,9 +210,9 @@ func (s *ForwardService) initializeCircuitBreakers() error {
 				upstream.Name,
 				3,              // maxRequests
 				10*time.Second, // interval
-				time.Duration(upstream.Config.Breaker.Cooldown)*time.Second, // timeout
-				upstream.Config.Breaker.Threshold,                           // failureThreshold
-				10,                                                          // minRequests
+				time.Duration(upstream.Config.Breaker.Cooldown)*time.Millisecond, // timeout
+				upstream.Config.Breaker.Threshold,                                // failureThreshold
+				10,                                                               // minRequests
 			)
 
 			cb, err := s.breakerFactory.Create(upstream.Name, settings)

@@ -46,7 +46,7 @@ func createRetryConfig() *config.HTTPClientConfig {
 func createNoRetryConfig() *config.HTTPClientConfig {
 	return &config.HTTPClientConfig{
 		Agent:     "LLMProxy/1.0",
-		KeepAlive: 60,
+		KeepAlive: 60000,
 		// Retry: nil 表示不启用重试
 	}
 }
@@ -55,16 +55,16 @@ func createNoRetryConfig() *config.HTTPClientConfig {
 func createFullConfig() *config.HTTPClientConfig {
 	return &config.HTTPClientConfig{
 		Agent:     "LLMProxy/1.0",
-		KeepAlive: 60,
+		KeepAlive: 60000,
 		Connect: &config.ConnectConfig{
 			IdleTotal:   100,
 			IdlePerHost: 10,
 			MaxPerHost:  50,
 		},
 		Timeout: &config.TimeoutConfig{
-			Connect: 10,
-			Request: 60,
-			Idle:    90,
+			Connect: 10000,
+			Request: 60000,
+			Idle:    90000,
 		},
 		Retry: &config.RetryConfig{
 			Attempts: 3,
@@ -80,7 +80,7 @@ func createFullConfig() *config.HTTPClientConfig {
 func createTimeoutConfig(connectTimeout, requestTimeout, idleTimeout int) *config.HTTPClientConfig {
 	return &config.HTTPClientConfig{
 		Agent:     "LLMProxy/1.0",
-		KeepAlive: 60,
+		KeepAlive: 60000,
 		Timeout: &config.TimeoutConfig{
 			Connect: connectTimeout,
 			Request: requestTimeout,
@@ -93,7 +93,7 @@ func createTimeoutConfig(connectTimeout, requestTimeout, idleTimeout int) *confi
 func createProxyConfig(proxyURL string) *config.HTTPClientConfig {
 	return &config.HTTPClientConfig{
 		Agent:     "LLMProxy/1.0",
-		KeepAlive: 60,
+		KeepAlive: 60000,
 		Proxy: &config.ProxyConfig{
 			URL: proxyURL,
 		},
@@ -377,7 +377,7 @@ func TestHTTPClient_TimeoutBehavior(t *testing.T) {
 		server := createSlowServer(2 * time.Second) // 2秒延迟
 		defer server.Close()
 
-		cfg := createTimeoutConfig(10, 1, 90) // 1秒请求超时
+		cfg := createTimeoutConfig(10000, 1000, 90000) // 1000毫秒请求超时
 
 		client, err := factory.Create(cfg)
 		require.NoError(t, err)
@@ -400,7 +400,7 @@ func TestHTTPClient_TimeoutBehavior(t *testing.T) {
 		server := createSlowServer(100 * time.Millisecond) // 100ms延迟
 		defer server.Close()
 
-		cfg := createTimeoutConfig(10, 5, 90) // 5秒请求超时
+		cfg := createTimeoutConfig(10000, 5000, 90000) // 5000毫秒请求超时
 
 		client, err := factory.Create(cfg)
 		require.NoError(t, err)
@@ -1508,13 +1508,13 @@ func TestConnectionPool(t *testing.T) {
 	})
 
 	t.Run("with timeout config", func(t *testing.T) {
-		cfg := createTimeoutConfig(15, 120, 180)
+		cfg := createTimeoutConfig(15000, 120000, 180000)
 		pool := NewConnectionPool(cfg)
 
 		transport := pool.GetTransport()
 		assert.NotNil(t, transport)
-		assert.Equal(t, 180*time.Second, transport.IdleConnTimeout)
-		assert.Equal(t, 120*time.Second, transport.ResponseHeaderTimeout)
+		assert.Equal(t, 180000*time.Millisecond, transport.IdleConnTimeout)
+		assert.Equal(t, 120000*time.Millisecond, transport.ResponseHeaderTimeout)
 
 		err := pool.Close()
 		assert.NoError(t, err)

@@ -35,9 +35,9 @@ func TestForwardService_Initialize(t *testing.T) {
 			Burst:     200,
 		},
 		Timeout: &config.TimeoutConfig{
-			Idle:  30,
-			Read:  15,
-			Write: 15,
+			Idle:  30000,
+			Read:  15000,
+			Write: 15000,
 		},
 	}
 
@@ -256,9 +256,9 @@ func TestForwardServer_Integration(t *testing.T) {
 		Port:         0, // Use random port
 		DefaultGroup: "test-group",
 		Timeout: &config.TimeoutConfig{
-			Idle:  30,
-			Read:  15,
-			Write: 15,
+			Idle:  30000,
+			Read:  15000,
+			Write: 15000,
 		},
 	}
 

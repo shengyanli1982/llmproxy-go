@@ -35,10 +35,10 @@ func NewForwardServer(debug bool, logger *logr.Logger, config *config.ForwardCon
 		WithLogger(logger).
 		WithAddress(config.Address).
 		WithPort(uint16(config.Port)).
-		WithHttpIdleTimeout(uint32(config.Timeout.Idle * 1000)). // 配置提供的单位是秒，orbit 框架需要的毫秒，这里主要转换一下
-		WithHttpReadHeaderTimeout(uint32(config.Timeout.Read * 1000)).
-		WithHttpReadTimeout(uint32(config.Timeout.Read * 1000)).
-		WithHttpWriteTimeout(uint32(config.Timeout.Write * 1000))
+		WithHttpIdleTimeout(uint32(config.Timeout.Idle)). // 配置提供的单位是毫秒，直接使用
+		WithHttpReadHeaderTimeout(uint32(config.Timeout.Read)).
+		WithHttpReadTimeout(uint32(config.Timeout.Read)).
+		WithHttpWriteTimeout(uint32(config.Timeout.Write))
 
 	// 创建引擎选项
 	opts := orbit.EmptyOptions()

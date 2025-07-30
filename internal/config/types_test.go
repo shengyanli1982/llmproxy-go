@@ -21,7 +21,7 @@ func TestHTTPClientConfig_Validation(t *testing.T) {
 			name: "valid config with all fields",
 			config: HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
-				KeepAlive: 60,
+				KeepAlive: 60000,
 				Connect: &ConnectConfig{
 					IdleTotal:   100,
 					IdlePerHost: 10,
@@ -47,7 +47,7 @@ func TestHTTPClientConfig_Validation(t *testing.T) {
 			name: "valid config with maximum values",
 			config: HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
-				KeepAlive: 600,
+				KeepAlive: 600000,
 				Connect: &ConnectConfig{
 					IdleTotal:   1000,
 					IdlePerHost: 100,
@@ -60,7 +60,7 @@ func TestHTTPClientConfig_Validation(t *testing.T) {
 			name: "valid config without connect section",
 			config: HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
-				KeepAlive: 60,
+				KeepAlive: 60000,
 				Connect:   nil, // omit connect config
 			},
 			wantErr: false,
@@ -69,7 +69,7 @@ func TestHTTPClientConfig_Validation(t *testing.T) {
 			name: "invalid keepalive - too high",
 			config: HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
-				KeepAlive: 601,
+				KeepAlive: 600001,
 			},
 			wantErr: true,
 			errMsg:  "KeepAlive",
@@ -398,7 +398,7 @@ func TestBreakerConfig_OptionalValidation(t *testing.T) {
 			name: "valid config with all fields",
 			config: BreakerConfig{
 				Threshold: 0.5,
-				Cooldown:  30,
+				Cooldown:  30000,
 			},
 			wantErr: false,
 		},
@@ -414,7 +414,7 @@ func TestBreakerConfig_OptionalValidation(t *testing.T) {
 			name: "invalid threshold - too low",
 			config: BreakerConfig{
 				Threshold: 0.005,
-				Cooldown:  30,
+				Cooldown:  30000,
 			},
 			wantErr: true,
 			errMsg:  "Threshold",
@@ -423,7 +423,7 @@ func TestBreakerConfig_OptionalValidation(t *testing.T) {
 			name: "invalid threshold - too high",
 			config: BreakerConfig{
 				Threshold: 1.5,
-				Cooldown:  30,
+				Cooldown:  30000,
 			},
 			wantErr: true,
 			errMsg:  "Threshold",
@@ -432,7 +432,7 @@ func TestBreakerConfig_OptionalValidation(t *testing.T) {
 			name: "invalid cooldown - too high",
 			config: BreakerConfig{
 				Threshold: 0.5,
-				Cooldown:  3601,
+				Cooldown:  3600001,
 			},
 			wantErr: true,
 			errMsg:  "Cooldown",

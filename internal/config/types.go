@@ -36,13 +36,13 @@ type RateLimitConfig struct {
 	Burst     int `yaml:"burst" validate:"omitempty,min=1,max=65535"`
 }
 
-// TimeoutConfig 代表超时配置，定义各种操作的超时时间
+// TimeoutConfig 代表超时配置，定义各种操作的超时时间（单位：毫秒）
 type TimeoutConfig struct {
-	Idle    int `yaml:"idle,omitempty" validate:"omitempty,min=1,max=86400"`
-	Read    int `yaml:"read,omitempty" validate:"omitempty,min=1,max=86400"`
-	Write   int `yaml:"write,omitempty" validate:"omitempty,min=1,max=86400"`
-	Connect int `yaml:"connect,omitempty" validate:"omitempty,min=1,max=86400"`
-	Request int `yaml:"request,omitempty" validate:"omitempty,min=1,max=86400"`
+	Idle    int `yaml:"idle,omitempty" validate:"omitempty,min=1000,max=86400000"`
+	Read    int `yaml:"read,omitempty" validate:"omitempty,min=1000,max=86400000"`
+	Write   int `yaml:"write,omitempty" validate:"omitempty,min=1000,max=86400000"`
+	Connect int `yaml:"connect,omitempty" validate:"omitempty,min=1000,max=86400000"`
+	Request int `yaml:"request,omitempty" validate:"omitempty,min=1000,max=86400000"`
 }
 
 // UpstreamConfig 代表上游服务配置，定义后端LLM API服务的连接参数
@@ -73,7 +73,7 @@ type HeaderOpConfig struct {
 // BreakerConfig 代表熔断器配置，用于保护上游服务避免过载
 type BreakerConfig struct {
 	Threshold float64 `yaml:"threshold,omitempty" validate:"omitempty,min=0.01,max=1.0"`
-	Cooldown  int     `yaml:"cooldown,omitempty" validate:"omitempty,min=1,max=3600"`
+	Cooldown  int     `yaml:"cooldown,omitempty" validate:"omitempty,min=1000,max=3600000"` // 单位：毫秒
 }
 
 // UpstreamGroupConfig 代表上游组配置，将多个上游服务组织为一个逻辑单元
@@ -98,7 +98,7 @@ type BalanceConfig struct {
 // HTTPClientConfig 代表HTTP客户端配置，控制与上游服务的连接行为
 type HTTPClientConfig struct {
 	Agent     string         `yaml:"agent"`
-	KeepAlive int            `yaml:"keepalive" validate:"min=0,max=600"`
+	KeepAlive int            `yaml:"keepalive" validate:"min=0,max=600000"` // 单位：毫秒
 	Connect   *ConnectConfig `yaml:"connect,omitempty"`
 	Timeout   *TimeoutConfig `yaml:"timeout,omitempty"`
 	Retry     *RetryConfig   `yaml:"retry,omitempty"`
@@ -115,7 +115,7 @@ type ConnectConfig struct {
 // RetryConfig 代表重试配置，定义失败请求的重试策略
 type RetryConfig struct {
 	Attempts int `yaml:"attempts" validate:"min=1,max=120"`
-	Initial  int `yaml:"initial" validate:"min=1,max=3600"`
+	Initial  int `yaml:"initial" validate:"min=100,max=3600000"` // 单位：毫秒
 }
 
 // ProxyConfig 代表代理配置，设置HTTP代理服务器

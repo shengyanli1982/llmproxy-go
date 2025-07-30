@@ -146,28 +146,28 @@ func (m *Manager) setForwardDefaults(config *Config) {
 		}
 		if forward.Timeout == nil {
 			forward.Timeout = &TimeoutConfig{
-				Idle:    60,
-				Read:    30,
-				Write:   30,
-				Connect: 10,
-				Request: 300,
+				Idle:    60000,
+				Read:    30000,
+				Write:   30000,
+				Connect: 10000,
+				Request: 300000,
 			}
 		} else {
 			// 如果Timeout存在但某些字段为0，设置默认值
 			if forward.Timeout.Idle == 0 {
-				forward.Timeout.Idle = 60
+				forward.Timeout.Idle = 60000
 			}
 			if forward.Timeout.Read == 0 {
-				forward.Timeout.Read = 30
+				forward.Timeout.Read = 30000
 			}
 			if forward.Timeout.Write == 0 {
-				forward.Timeout.Write = 30
+				forward.Timeout.Write = 30000
 			}
 			if forward.Timeout.Connect == 0 {
-				forward.Timeout.Connect = 10
+				forward.Timeout.Connect = 10000
 			}
 			if forward.Timeout.Request == 0 {
-				forward.Timeout.Request = 300
+				forward.Timeout.Request = 300000
 			}
 		}
 	}
@@ -183,28 +183,28 @@ func (m *Manager) setAdminDefaults(config *Config) {
 	}
 	if config.HTTPServer.Admin.Timeout == nil {
 		config.HTTPServer.Admin.Timeout = &TimeoutConfig{
-			Idle:    60,
-			Read:    30,
-			Write:   30,
-			Connect: 10,
-			Request: 300,
+			Idle:    60000,
+			Read:    30000,
+			Write:   30000,
+			Connect: 10000,
+			Request: 300000,
 		}
 	} else {
 		// 如果Timeout存在但某些字段为0，设置默认值
 		if config.HTTPServer.Admin.Timeout.Idle == 0 {
-			config.HTTPServer.Admin.Timeout.Idle = 60
+			config.HTTPServer.Admin.Timeout.Idle = 60000
 		}
 		if config.HTTPServer.Admin.Timeout.Read == 0 {
-			config.HTTPServer.Admin.Timeout.Read = 30
+			config.HTTPServer.Admin.Timeout.Read = 30000
 		}
 		if config.HTTPServer.Admin.Timeout.Write == 0 {
-			config.HTTPServer.Admin.Timeout.Write = 30
+			config.HTTPServer.Admin.Timeout.Write = 30000
 		}
 		if config.HTTPServer.Admin.Timeout.Connect == 0 {
-			config.HTTPServer.Admin.Timeout.Connect = 10
+			config.HTTPServer.Admin.Timeout.Connect = 10000
 		}
 		if config.HTTPServer.Admin.Timeout.Request == 0 {
-			config.HTTPServer.Admin.Timeout.Request = 300
+			config.HTTPServer.Admin.Timeout.Request = 300000
 		}
 	}
 }
@@ -223,7 +223,7 @@ func (m *Manager) setUpstreamDefaults(config *Config) {
 				upstream.Breaker.Threshold = 0.5
 			}
 			if upstream.Breaker.Cooldown == 0 {
-				upstream.Breaker.Cooldown = 30
+				upstream.Breaker.Cooldown = 30000
 			}
 		}
 	}
@@ -239,21 +239,26 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 		if group.HTTPClient == nil {
 			group.HTTPClient = &HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
-				KeepAlive: 60,
+				KeepAlive: 60000,
 				Connect: &ConnectConfig{
 					IdleTotal:   100,
 					IdlePerHost: 10,
 					MaxPerHost:  50,
 				},
 				Timeout: &TimeoutConfig{
-					Connect: 10,
-					Request: 300,
-					Idle:    60,
-					Read:    30,
-					Write:   30,
+					Connect: 10000,
+					Request: 300000,
+					Idle:    60000,
+					Read:    30000,
+					Write:   30000,
 				},
 			}
 		} else {
+			// 如果HTTPClient存在但KeepAlive为0，设置默认值
+			if group.HTTPClient.KeepAlive == 0 {
+				group.HTTPClient.KeepAlive = 60000
+			}
+
 			// 如果HTTPClient存在但Connect为nil，设置默认的Connect配置
 			if group.HTTPClient.Connect == nil {
 				group.HTTPClient.Connect = &ConnectConfig{
@@ -277,28 +282,28 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 			// 如果HTTPClient存在但Timeout为nil，设置默认的Timeout配置
 			if group.HTTPClient.Timeout == nil {
 				group.HTTPClient.Timeout = &TimeoutConfig{
-					Connect: 10,
-					Request: 300,
-					Idle:    60,
-					Read:    30,
-					Write:   30,
+					Connect: 10000,
+					Request: 300000,
+					Idle:    60000,
+					Read:    30000,
+					Write:   30000,
 				}
 			} else {
 				// 如果Timeout存在但某些字段为0，设置默认值
 				if group.HTTPClient.Timeout.Connect == 0 {
-					group.HTTPClient.Timeout.Connect = 10
+					group.HTTPClient.Timeout.Connect = 10000
 				}
 				if group.HTTPClient.Timeout.Request == 0 {
-					group.HTTPClient.Timeout.Request = 300
+					group.HTTPClient.Timeout.Request = 300000
 				}
 				if group.HTTPClient.Timeout.Idle == 0 {
-					group.HTTPClient.Timeout.Idle = 60
+					group.HTTPClient.Timeout.Idle = 60000
 				}
 				if group.HTTPClient.Timeout.Read == 0 {
-					group.HTTPClient.Timeout.Read = 30
+					group.HTTPClient.Timeout.Read = 30000
 				}
 				if group.HTTPClient.Timeout.Write == 0 {
-					group.HTTPClient.Timeout.Write = 30
+					group.HTTPClient.Timeout.Write = 30000
 				}
 			}
 		}
