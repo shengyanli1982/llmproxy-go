@@ -38,11 +38,11 @@ type RateLimitConfig struct {
 
 // TimeoutConfig 代表超时配置，定义各种操作的超时时间
 type TimeoutConfig struct {
-	Idle    int `yaml:"idle" validate:"min=1"`
-	Read    int `yaml:"read" validate:"min=1"`
-	Write   int `yaml:"write" validate:"min=1"`
-	Connect int `yaml:"connect,omitempty" validate:"min=1"`
-	Request int `yaml:"request,omitempty" validate:"min=1"`
+	Idle    int `yaml:"idle,omitempty" validate:"omitempty,min=1"`
+	Read    int `yaml:"read,omitempty" validate:"omitempty,min=1"`
+	Write   int `yaml:"write,omitempty" validate:"omitempty,min=1"`
+	Connect int `yaml:"connect,omitempty" validate:"omitempty,min=1"`
+	Request int `yaml:"request,omitempty" validate:"omitempty,min=1"`
 }
 
 // UpstreamConfig 代表上游服务配置，定义后端LLM API服务的连接参数
@@ -57,23 +57,23 @@ type UpstreamConfig struct {
 
 // AuthConfig 代表认证配置，支持Bearer Token和Basic Auth
 type AuthConfig struct {
-	Type     string `yaml:"type" validate:"oneof=none bearer basic"`
-	Token    string `yaml:"token,omitempty"`
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
+	Type     string `yaml:"type,omitempty" validate:"oneof='' none bearer basic"`
+	Token    string `yaml:"token,omitempty" validate:"auth_conditional"`
+	Username string `yaml:"username,omitempty" validate:"auth_conditional"`
+	Password string `yaml:"password,omitempty" validate:"auth_conditional"`
 }
 
 // HeaderOpConfig 代表HTTP头部操作配置，用于修改转发请求的头部信息
 type HeaderOpConfig struct {
 	Op    string `yaml:"op" validate:"required,oneof=insert replace remove"`
 	Key   string `yaml:"key" validate:"required"`
-	Value string `yaml:"value,omitempty"`
+	Value string `yaml:"value,omitempty" validate:"header_conditional"`
 }
 
 // BreakerConfig 代表熔断器配置，用于保护上游服务避免过载
 type BreakerConfig struct {
-	Threshold float64 `yaml:"threshold" validate:"min=0.01,max=1.0"`
-	Cooldown  int     `yaml:"cooldown" validate:"min=1,max=3600"`
+	Threshold float64 `yaml:"threshold,omitempty" validate:"omitempty,min=0.01,max=1.0"`
+	Cooldown  int     `yaml:"cooldown,omitempty" validate:"omitempty,min=1,max=3600"`
 }
 
 // UpstreamGroupConfig 代表上游组配置，将多个上游服务组织为一个逻辑单元
@@ -99,9 +99,17 @@ type BalanceConfig struct {
 type HTTPClientConfig struct {
 	Agent     string         `yaml:"agent"`
 	KeepAlive int            `yaml:"keepalive" validate:"min=0,max=600"`
+	Connect   *ConnectConfig `yaml:"connect,omitempty"`
 	Timeout   *TimeoutConfig `yaml:"timeout,omitempty"`
 	Retry     *RetryConfig   `yaml:"retry,omitempty"`
 	Proxy     *ProxyConfig   `yaml:"proxy,omitempty"`
+}
+
+// ConnectConfig 代表连接池配置，控制HTTP连接的复用和管理
+type ConnectConfig struct {
+	IdleTotal   int `yaml:"idleTotal" validate:"min=0,max=1000"`
+	IdlePerHost int `yaml:"idlePerHost" validate:"min=0,max=100"`
+	MaxPerHost  int `yaml:"maxPerHost" validate:"min=0,max=500"`
 }
 
 // RetryConfig 代表重试配置，定义失败请求的重试策略

@@ -21,6 +21,10 @@ type Manager struct {
 
 // NewManager 创建新的配置管理器实例
 func NewManager() *Manager {
+	// 注册自定义验证器
+	validate.RegisterValidation("auth_conditional", validateAuthConditional)
+	validate.RegisterValidation("header_conditional", validateHeaderConditional)
+
 	return &Manager{
 		validator: validate,
 	}
@@ -142,9 +146,28 @@ func (m *Manager) setForwardDefaults(config *Config) {
 		}
 		if forward.Timeout == nil {
 			forward.Timeout = &TimeoutConfig{
-				Idle:  60,
-				Read:  30,
-				Write: 30,
+				Idle:    60,
+				Read:    30,
+				Write:   30,
+				Connect: 10,
+				Request: 300,
+			}
+		} else {
+			// 如果Timeout存在但某些字段为0，设置默认值
+			if forward.Timeout.Idle == 0 {
+				forward.Timeout.Idle = 60
+			}
+			if forward.Timeout.Read == 0 {
+				forward.Timeout.Read = 30
+			}
+			if forward.Timeout.Write == 0 {
+				forward.Timeout.Write = 30
+			}
+			if forward.Timeout.Connect == 0 {
+				forward.Timeout.Connect = 10
+			}
+			if forward.Timeout.Request == 0 {
+				forward.Timeout.Request = 300
 			}
 		}
 	}
@@ -160,9 +183,28 @@ func (m *Manager) setAdminDefaults(config *Config) {
 	}
 	if config.HTTPServer.Admin.Timeout == nil {
 		config.HTTPServer.Admin.Timeout = &TimeoutConfig{
-			Idle:  60,
-			Read:  30,
-			Write: 30,
+			Idle:    60,
+			Read:    30,
+			Write:   30,
+			Connect: 10,
+			Request: 300,
+		}
+	} else {
+		// 如果Timeout存在但某些字段为0，设置默认值
+		if config.HTTPServer.Admin.Timeout.Idle == 0 {
+			config.HTTPServer.Admin.Timeout.Idle = 60
+		}
+		if config.HTTPServer.Admin.Timeout.Read == 0 {
+			config.HTTPServer.Admin.Timeout.Read = 30
+		}
+		if config.HTTPServer.Admin.Timeout.Write == 0 {
+			config.HTTPServer.Admin.Timeout.Write = 30
+		}
+		if config.HTTPServer.Admin.Timeout.Connect == 0 {
+			config.HTTPServer.Admin.Timeout.Connect = 10
+		}
+		if config.HTTPServer.Admin.Timeout.Request == 0 {
+			config.HTTPServer.Admin.Timeout.Request = 300
 		}
 	}
 }
@@ -173,6 +215,8 @@ func (m *Manager) setUpstreamDefaults(config *Config) {
 		upstream := &config.Upstreams[i]
 		if upstream.Auth == nil {
 			upstream.Auth = &AuthConfig{Type: "none"}
+		} else if upstream.Auth.Type == "" {
+			upstream.Auth.Type = "none"
 		}
 		if upstream.Breaker != nil {
 			if upstream.Breaker.Threshold == 0 {
@@ -196,11 +240,66 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 			group.HTTPClient = &HTTPClientConfig{
 				Agent:     "LLMProxy/1.0",
 				KeepAlive: 60,
+				Connect: &ConnectConfig{
+					IdleTotal:   100,
+					IdlePerHost: 10,
+					MaxPerHost:  50,
+				},
 				Timeout: &TimeoutConfig{
 					Connect: 10,
 					Request: 300,
 					Idle:    60,
+					Read:    30,
+					Write:   30,
 				},
+			}
+		} else {
+			// 如果HTTPClient存在但Connect为nil，设置默认的Connect配置
+			if group.HTTPClient.Connect == nil {
+				group.HTTPClient.Connect = &ConnectConfig{
+					IdleTotal:   100,
+					IdlePerHost: 10,
+					MaxPerHost:  50,
+				}
+			} else {
+				// 如果Connect存在但某些字段为0，设置默认值
+				if group.HTTPClient.Connect.IdleTotal == 0 {
+					group.HTTPClient.Connect.IdleTotal = 100
+				}
+				if group.HTTPClient.Connect.IdlePerHost == 0 {
+					group.HTTPClient.Connect.IdlePerHost = 10
+				}
+				if group.HTTPClient.Connect.MaxPerHost == 0 {
+					group.HTTPClient.Connect.MaxPerHost = 50
+				}
+			}
+
+			// 如果HTTPClient存在但Timeout为nil，设置默认的Timeout配置
+			if group.HTTPClient.Timeout == nil {
+				group.HTTPClient.Timeout = &TimeoutConfig{
+					Connect: 10,
+					Request: 300,
+					Idle:    60,
+					Read:    30,
+					Write:   30,
+				}
+			} else {
+				// 如果Timeout存在但某些字段为0，设置默认值
+				if group.HTTPClient.Timeout.Connect == 0 {
+					group.HTTPClient.Timeout.Connect = 10
+				}
+				if group.HTTPClient.Timeout.Request == 0 {
+					group.HTTPClient.Timeout.Request = 300
+				}
+				if group.HTTPClient.Timeout.Idle == 0 {
+					group.HTTPClient.Timeout.Idle = 60
+				}
+				if group.HTTPClient.Timeout.Read == 0 {
+					group.HTTPClient.Timeout.Read = 30
+				}
+				if group.HTTPClient.Timeout.Write == 0 {
+					group.HTTPClient.Timeout.Write = 30
+				}
 			}
 		}
 
@@ -210,5 +309,46 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 				group.Upstreams[j].Weight = 1
 			}
 		}
+	}
+}
+
+// validateAuthConditional 验证认证配置的条件必填字段
+func validateAuthConditional(fl validator.FieldLevel) bool {
+	auth, ok := fl.Parent().Interface().(AuthConfig)
+	if !ok {
+		return true // 如果不是AuthConfig类型，跳过验证
+	}
+
+	switch auth.Type {
+	case "bearer":
+		// 当type为bearer时，token必填
+		return auth.Token != ""
+	case "basic":
+		// 当type为basic时，username和password必填
+		return auth.Username != "" && auth.Password != ""
+	case "none", "":
+		// 当type为none或空时，不需要其他字段
+		return true
+	default:
+		return false // 未知的认证类型
+	}
+}
+
+// validateHeaderConditional 验证头部操作配置的条件必填字段
+func validateHeaderConditional(fl validator.FieldLevel) bool {
+	header, ok := fl.Parent().Interface().(HeaderOpConfig)
+	if !ok {
+		return true // 如果不是HeaderOpConfig类型，跳过验证
+	}
+
+	switch header.Op {
+	case "insert", "replace":
+		// 当op为insert或replace时，value必填
+		return header.Value != ""
+	case "remove":
+		// 当op为remove时，value可选
+		return true
+	default:
+		return false // 未知的操作类型
 	}
 }
