@@ -153,9 +153,6 @@ Technical Specifications:
 Author: shengyanli1982
 Repository: https://github.com/shengyanli1982/llmproxy-go`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// 输出 ASCII 标志
-			fmt.Println(ASCII_LOGO)
-
 			// 创建服务上下文
 			ctx := &ServiceContext{}
 
@@ -171,6 +168,9 @@ Repository: https://github.com/shengyanli1982/llmproxy-go`,
 			}
 
 			ctx.logger.Info("Configuration loaded successfully", "path", ctx.configMgr.GetConfigPath())
+
+			// 输出 ASCII 标志（只有在配置加载成功后才显示）
+			fmt.Println(ASCII_LOGO)
 
 			// 创建代理服务器
 			ctx.proxyServer = server.NewServer(!releaseMode, ctx.logger, &ctx.config.HTTPServer, ctx.config)
