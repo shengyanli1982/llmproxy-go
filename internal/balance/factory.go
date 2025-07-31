@@ -41,8 +41,6 @@ func (f *balanceFactory) Create(config *config.BalanceConfig) (LoadBalancer, err
 		return NewRandomBalancer(), nil
 	case "failover":
 		return NewFailoverBalancer(), nil
-	case "response_aware":
-		return NewResponseAwareBalancer(), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownStrategy, strategy)
 	}

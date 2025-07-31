@@ -3,7 +3,6 @@ package balance
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/sony/gobreaker"
@@ -81,38 +80,6 @@ func TestRandomBalancer(t *testing.T) {
 	assert.True(t, selectedUpstreams["upstream3"])
 }
 
-func TestResponseAwareBalancer(t *testing.T) {
-	upstreams := []Upstream{
-		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
-		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
-		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
-	}
-
-	balancer := NewResponseAwareBalancer()
-	ctx := context.Background()
-
-	// Initially should select randomly
-	upstream, err := balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Contains(t, []string{"upstream1", "upstream2", "upstream3"}, upstream.Name)
-
-	// Update latencies to influence selection
-	balancer.UpdateLatency("upstream1", 100) // Fast
-	balancer.UpdateLatency("upstream2", 500) // Slow
-	balancer.UpdateLatency("upstream3", 200) // Medium
-
-	// After multiple selections, should prefer faster upstream
-	selections := make(map[string]int)
-	for i := 0; i < 100; i++ {
-		upstream, err := balancer.Select(ctx, upstreams)
-		require.NoError(t, err)
-		selections[upstream.Name]++
-	}
-
-	// upstream1 (fastest) should be selected most often
-	assert.Greater(t, selections["upstream1"], selections["upstream2"])
-}
-
 func TestFailoverBalancer(t *testing.T) {
 	upstreams := []Upstream{
 		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
@@ -168,12 +135,7 @@ func TestFactory_Create(t *testing.T) {
 			wantType:  "random",
 			wantError: false,
 		},
-		{
-			name:      "response_aware",
-			config:    &config.BalanceConfig{Strategy: "response_aware"},
-			wantType:  "response_aware",
-			wantError: false,
-		},
+
 		{
 			name:      "failover",
 			config:    &config.BalanceConfig{Strategy: "failover"},
@@ -210,29 +172,11 @@ func TestFactory_Create(t *testing.T) {
 	}
 }
 
-func TestSlidingWindow(t *testing.T) {
-	window := NewSlidingWindow(3)
-
-	// Test adding records
-	window.Add(100)
-	window.Add(200)
-	window.Add(300)
-
-	avg := window.Average()
-	assert.Equal(t, int64(200), avg) // (100+200+300)/3 = 200
-
-	// Test window sliding
-	window.Add(400) // Should remove 100, window: [200, 300, 400]
-	avg = window.Average()
-	assert.Equal(t, int64(300), avg) // (200+300+400)/3 = 300
-}
-
 func TestEmptyUpstreams(t *testing.T) {
 	balancers := []LoadBalancer{
 		NewRRBalancer(),
 		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
-		NewResponseAwareBalancer(),
 		NewFailoverBalancer(),
 	}
 
@@ -247,37 +191,6 @@ func TestEmptyUpstreams(t *testing.T) {
 	}
 }
 
-func TestBalancerWithBreaker(t *testing.T) {
-	upstreams := []Upstream{
-		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
-	}
-
-	// Test with response aware balancer (which implements LoadBalancerWithBreaker)
-	balancer := NewResponseAwareBalancer()
-	ctx := context.Background()
-
-	if breakerBalancer, ok := balancer.(LoadBalancerWithBreaker); ok {
-		// Test creating a breaker
-		settings := gobreaker.Settings{
-			Name:        "test-breaker",
-			MaxRequests: 3,
-			Interval:    10 * time.Second,
-			Timeout:     5 * time.Second,
-			ReadyToTrip: func(counts gobreaker.Counts) bool {
-				return counts.ConsecutiveFailures > 2
-			},
-		}
-
-		err := breakerBalancer.CreateBreaker("upstream1", settings)
-		assert.NoError(t, err)
-
-		// Should still be able to select upstream
-		upstream, err := balancer.Select(ctx, upstreams)
-		assert.NoError(t, err)
-		assert.Equal(t, "upstream1", upstream.Name)
-	}
-}
-
 // Benchmark tests
 func BenchmarkRoundRobinBalancer_Select(b *testing.B) {
 	upstreams := []Upstream{
@@ -288,27 +201,6 @@ func BenchmarkRoundRobinBalancer_Select(b *testing.B) {
 
 	balancer := NewRRBalancer()
 	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = balancer.Select(ctx, upstreams)
-	}
-}
-
-func BenchmarkResponseAwareBalancer_Select(b *testing.B) {
-	upstreams := []Upstream{
-		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
-		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
-		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
-	}
-
-	balancer := NewResponseAwareBalancer()
-	ctx := context.Background()
-
-	// Simulate some latency data
-	balancer.UpdateLatency("upstream1", 100)
-	balancer.UpdateLatency("upstream2", 200)
-	balancer.UpdateLatency("upstream3", 150)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -370,7 +262,6 @@ func TestUpdateHealthMethods(t *testing.T) {
 		NewRRBalancer(),
 		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
-		NewResponseAwareBalancer(),
 		NewFailoverBalancer(),
 	}
 
@@ -388,7 +279,6 @@ func TestUpdateLatencyMethods(t *testing.T) {
 		NewRRBalancer(),
 		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
-		NewResponseAwareBalancer(),
 		NewFailoverBalancer(),
 	}
 
@@ -398,50 +288,6 @@ func TestUpdateLatencyMethods(t *testing.T) {
 			balancer.UpdateLatency("upstream1", 100)
 			balancer.UpdateLatency("upstream1", 200)
 		})
-	}
-}
-
-func TestResponseAwareBalancer_WithBreaker(t *testing.T) {
-	upstreams := []Upstream{
-		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
-	}
-
-	balancer := NewResponseAwareBalancer()
-	ctx := context.Background()
-
-	// Test implementing LoadBalancerWithBreaker interface
-	if breakerBalancer, ok := balancer.(LoadBalancerWithBreaker); ok {
-		// Test GetBreaker before creating one
-		_, exists := breakerBalancer.GetBreaker("upstream1")
-		assert.False(t, exists)
-
-		// Create breaker
-		settings := gobreaker.Settings{
-			Name:        "test-breaker",
-			MaxRequests: 3,
-			Interval:    10 * time.Second,
-			Timeout:     5 * time.Second,
-			ReadyToTrip: func(counts gobreaker.Counts) bool {
-				return counts.ConsecutiveFailures > 2
-			},
-		}
-
-		err := breakerBalancer.CreateBreaker("upstream1", settings)
-		assert.NoError(t, err)
-
-		// Test GetBreaker after creating one
-		breaker, exists := breakerBalancer.GetBreaker("upstream1")
-		assert.True(t, exists)
-		assert.NotNil(t, breaker)
-
-		// Test creating breaker for same upstream again (should not error)
-		err = breakerBalancer.CreateBreaker("upstream1", settings)
-		assert.NoError(t, err)
-
-		// Should still be able to select upstream
-		upstream, err := balancer.Select(ctx, upstreams)
-		assert.NoError(t, err)
-		assert.Equal(t, "upstream1", upstream.Name)
 	}
 }
 
@@ -509,35 +355,12 @@ func TestFailoverBalancer_WithBreaker(t *testing.T) {
 	}
 }
 
-func TestSlidingWindow_EdgeCases(t *testing.T) {
-	t.Run("empty window average", func(t *testing.T) {
-		window := NewSlidingWindow(3)
-		avg := window.Average()
-		assert.Equal(t, int64(1000), avg) // Default value for empty window
-	})
-
-	t.Run("single value", func(t *testing.T) {
-		window := NewSlidingWindow(1)
-		window.Add(100)
-		avg := window.Average()
-		assert.Equal(t, int64(100), avg)
-	})
-
-	t.Run("zero size window", func(t *testing.T) {
-		window := NewSlidingWindow(0)
-		window.Add(100)
-		avg := window.Average()
-		assert.Equal(t, int64(1000), avg) // Default value for zero size window
-	})
-}
-
 func TestBalancersWithConfigDefaults(t *testing.T) {
 	// Test balancers with config.default.yaml strategy values
 	strategies := []string{
 		"roundrobin",
 		"weighted_roundrobin",
 		"random",
-		"response_aware",
 		"failover",
 	}
 

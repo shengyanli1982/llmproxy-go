@@ -601,6 +601,82 @@ func TestProxyConfig_HTTPURLValidation(t *testing.T) {
 	}
 }
 
+func TestBalanceConfig_Validation(t *testing.T) {
+	validator := validator.New()
+
+	tests := []struct {
+		name    string
+		config  BalanceConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid roundrobin strategy",
+			config: BalanceConfig{
+				Strategy: "roundrobin",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid weighted_roundrobin strategy",
+			config: BalanceConfig{
+				Strategy: "weighted_roundrobin",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid random strategy",
+			config: BalanceConfig{
+				Strategy: "random",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid failover strategy",
+			config: BalanceConfig{
+				Strategy: "failover",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid response_aware strategy (removed)",
+			config: BalanceConfig{
+				Strategy: "response_aware",
+			},
+			wantErr: true,
+			errMsg:  "Strategy",
+		},
+		{
+			name: "invalid unknown strategy",
+			config: BalanceConfig{
+				Strategy: "unknown",
+			},
+			wantErr: true,
+			errMsg:  "Strategy",
+		},
+		{
+			name: "empty strategy (invalid, must specify strategy)",
+			config: BalanceConfig{
+				Strategy: "",
+			},
+			wantErr: true,
+			errMsg:  "Strategy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator.Struct(&tt.config)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestBreakerConfig_OptionalValidation(t *testing.T) {
 	validator := validator.New()
 

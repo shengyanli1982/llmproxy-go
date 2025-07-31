@@ -94,7 +94,7 @@ type UpstreamRefConfig struct {
 
 // BalanceConfig 代表负载均衡配置，定义选择上游服务的策略
 type BalanceConfig struct {
-	Strategy string `yaml:"strategy" validate:"oneof=roundrobin weighted_roundrobin random response_aware failover"`
+	Strategy string `yaml:"strategy" validate:"oneof=roundrobin weighted_roundrobin random failover"`
 }
 
 // HTTPClientConfig 代表HTTP客户端配置，控制与上游服务的连接行为

@@ -9,6 +9,13 @@ import (
 	"github.com/sony/gobreaker"
 )
 
+// clientIPKey 是用于在 context 中存储客户端 IP 的私有类型
+// 使用私有类型作为 key 可以避免与其他包的 context key 冲突
+type clientIPKey struct{}
+
+// clientIPContextKey 是客户端 IP 的 context key 实例
+var clientIPContextKey = clientIPKey{}
+
 // 负载均衡相关错误定义
 var (
 	ErrNoAvailableUpstream = errors.New("no available upstream")
@@ -49,10 +56,10 @@ type LoadBalancer interface {
 // LoadBalancerWithBreaker 扩展负载均衡器接口，支持熔断器功能
 type LoadBalancerWithBreaker interface {
 	LoadBalancer
-	
+
 	// CreateBreaker 为上游服务创建熔断器
 	CreateBreaker(upstreamName string, settings gobreaker.Settings) error
-	
+
 	// GetBreaker 获取指定上游的熔断器
 	GetBreaker(upstreamName string) (breaker.CircuitBreaker, bool)
 }
@@ -62,4 +69,37 @@ type LoadBalancerFactory interface {
 	// Create 根据配置创建负载均衡器
 	// config: 负载均衡配置
 	Create(config *config.BalanceConfig) (LoadBalancer, error)
+}
+
+// WithClientIP 将客户端 IP 地址存储到 context 中
+// 此函数用于在负载均衡器选择过程中传递客户端 IP 信息
+// 主要用于基于客户端 IP 的负载均衡算法（如一致性哈希）
+//
+// 参数：
+//   - ctx: 父级 context
+//   - clientIP: 客户端 IP 地址字符串
+//
+// 返回值：
+//   - 包含客户端 IP 信息的新 context
+func WithClientIP(ctx context.Context, clientIP string) context.Context {
+	return context.WithValue(ctx, clientIPContextKey, clientIP)
+}
+
+// GetClientIP 从 context 中获取客户端 IP 地址
+// 此函数用于在负载均衡器中提取客户端 IP 信息
+//
+// 参数：
+//   - ctx: 包含客户端 IP 信息的 context
+//
+// 返回值：
+//   - clientIP: 客户端 IP 地址字符串，如果不存在则返回空字符串
+//   - ok: 布尔值，表示是否成功获取到客户端 IP
+func GetClientIP(ctx context.Context) (clientIP string, ok bool) {
+	value := ctx.Value(clientIPContextKey)
+	if value == nil {
+		return "", false
+	}
+
+	clientIP, ok = value.(string)
+	return clientIP, ok
 }
