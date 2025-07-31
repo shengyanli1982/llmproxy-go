@@ -712,7 +712,7 @@ func createTestServer(t *testing.T, upstreams []*testUpstreamServer, rateLimitCo
 func TestForwardService_CircuitBreakerIntegration(t *testing.T) {
 	logger := logr.Discard()
 
-	t.Run("熔断器初始化和配置验证", func(t *testing.T) {
+	t.Run("circuit_breaker_initialization_and_config_validation", func(t *testing.T) {
 		// 创建包含熔断器配置的上游配置
 		upstreamConfig := config.UpstreamConfig{
 			Name: "test-upstream-with-breaker",
@@ -765,7 +765,7 @@ func TestForwardService_CircuitBreakerIntegration(t *testing.T) {
 		assert.Equal(t, "closed", cb.State().String())
 	})
 
-	t.Run("熔断器状态检查和拒绝逻辑", func(t *testing.T) {
+	t.Run("circuit_breaker_state_check_and_rejection_logic", func(t *testing.T) {
 		// 创建一个总是失败的测试服务器
 		failingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -838,7 +838,7 @@ func TestForwardService_CircuitBreakerIntegration(t *testing.T) {
 		// 这里我们主要验证Execute方法的包装功能正常工作
 	})
 
-	t.Run("验证熔断器与负载均衡器的集成", func(t *testing.T) {
+	t.Run("verify_circuit_breaker_load_balancer_integration", func(t *testing.T) {
 		// 创建测试上游配置
 		upstreamConfig := config.UpstreamConfig{
 			Name: "test-upstream-lb",
@@ -862,7 +862,7 @@ func TestForwardService_CircuitBreakerIntegration(t *testing.T) {
 				{
 					Name: "test-group",
 					Balance: &config.BalanceConfig{
-						Strategy: "response_aware", // 使用支持熔断器的负载均衡器
+						Strategy: "failover", // 使用支持熔断器的负载均衡器
 					},
 					Upstreams: []config.UpstreamRefConfig{
 						{Name: "test-upstream-lb", Weight: 1},
