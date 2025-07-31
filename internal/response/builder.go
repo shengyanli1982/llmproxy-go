@@ -24,6 +24,7 @@ package response
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shengyanli1982/toolkit/pkg/httptool"
@@ -57,24 +58,39 @@ type ResponseBuilder struct {
 	response *httptool.BaseHttpResponse
 }
 
+// responseBuilderPool 是 ResponseBuilder 对象池，减少频繁创建和销毁的内存分配开销
+var responseBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return &ResponseBuilder{
+			response: &httptool.BaseHttpResponse{},
+		}
+	},
+}
+
+// reset 重置 ResponseBuilder 的状态，确保对象池中的对象是干净的
+func (r *ResponseBuilder) reset() {
+	r.response.Code = 0
+	r.response.Data = nil
+	r.response.ErrorMessage = ""
+	r.response.ErrorDetail = nil
+}
+
 // Success 创建成功响应构建器
 func Success(data interface{}) *ResponseBuilder {
-	return &ResponseBuilder{
-		response: &httptool.BaseHttpResponse{
-			Code: CodeSuccess,
-			Data: data,
-		},
-	}
+	builder := responseBuilderPool.Get().(*ResponseBuilder)
+	builder.reset()
+	builder.response.Code = CodeSuccess
+	builder.response.Data = data
+	return builder
 }
 
 // Error 创建错误响应构建器
 func Error(code int64, message string) *ResponseBuilder {
-	return &ResponseBuilder{
-		response: &httptool.BaseHttpResponse{
-			Code:         code,
-			ErrorMessage: message,
-		},
-	}
+	builder := responseBuilderPool.Get().(*ResponseBuilder)
+	builder.reset()
+	builder.response.Code = code
+	builder.response.ErrorMessage = message
+	return builder
 }
 
 // WithDetail 添加错误详细信息，支持链式调用
@@ -92,6 +108,8 @@ func (r *ResponseBuilder) WithData(data interface{}) *ResponseBuilder {
 // JSON 将响应输出为JSON格式到gin.Context
 func (r *ResponseBuilder) JSON(c *gin.Context, httpStatus int) {
 	c.JSON(httpStatus, r.response)
+	// 将对象归还到池中，减少内存分配
+	responseBuilderPool.Put(r)
 }
 
 // GetResponse 获取底层的BaseHttpResponse对象

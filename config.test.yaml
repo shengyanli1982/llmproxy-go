@@ -62,6 +62,27 @@ upstreams:
     # 限速器测试
     ratelimit:
       perSecond: 20
+  - name: volcengine_backup
+    url: "https://ark.cn-beijing.volces.com"
+    auth:
+      type: "bearer"
+      token: "0b252972-c113-452b-801e-6e283dd13eba"
+    headers:
+      - op: "insert"
+        key: "Content-Type"
+        value: "application/json"
+      - op: "insert"
+        key: "X-LLMProxy-Test"
+        value: "VolcEngine-Test"
+    # 熔断器测试
+    breaker:
+      threshold: 0.6
+      cooldown: 30000
+      maxRequests: 5
+      interval: 15000
+    # 限速器测试
+    ratelimit:
+      perSecond: 20
 
 #-------------------------------------------------------------------------------
 # 上游组定义 (upstreamGroups)
@@ -71,6 +92,7 @@ upstreamGroups:
   - name: volcengine_group
     upstreams:
       - name: volcengine_primary
+      - name: volcengine_backup
     balance:
       strategy: "roundrobin"
     httpClient:

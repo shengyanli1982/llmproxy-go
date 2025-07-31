@@ -2,14 +2,13 @@ package balance
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 )
 
 // RRBalancer 实现轮询负载均衡算法
 // 按顺序依次选择上游服务，实现请求的均匀分布
 type RRBalancer struct {
-	mu    sync.Mutex // 保护并发访问
-	index int        // 当前选择索引
+	index uint64 // 当前选择索引，使用原子操作
 }
 
 // NewRRBalancer 创建新的轮询负载均衡器实例
@@ -30,12 +29,9 @@ func (b *RRBalancer) Select(ctx context.Context, upstreams []Upstream) (Upstream
 		return Upstream{}, ErrEmptyUpstreams
 	}
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// 选择当前索引对应的上游服务
-	selected := upstreams[b.index%len(upstreams)]
-	b.index++
+	// 使用原子操作获取下一个索引
+	idx := atomic.AddUint64(&b.index, 1) - 1
+	selected := upstreams[idx%uint64(len(upstreams))]
 
 	return selected, nil
 }

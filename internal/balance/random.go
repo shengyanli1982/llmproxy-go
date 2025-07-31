@@ -2,22 +2,20 @@ package balance
 
 import (
 	"context"
-	"math/rand"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // randomBalancer 实现随机负载均衡算法
 // 随机选择上游服务，适用于服务性能相近的场景
 type randomBalancer struct {
-	rand *rand.Rand // 随机数生成器
-	mu   sync.Mutex // 保护并发访问
+	seed uint64 // 原子操作的随机种子
 }
 
 // NewRandomBalancer 创建新的随机负载均衡器实例
 func NewRandomBalancer() LoadBalancer {
 	return &randomBalancer{
-		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
+		seed: uint64(time.Now().UnixNano()),
 	}
 }
 
@@ -32,11 +30,11 @@ func (b *randomBalancer) Select(ctx context.Context, upstreams []Upstream) (Upst
 		return Upstream{}, ErrEmptyUpstreams
 	}
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// 随机选择一个上游服务
-	index := b.rand.Intn(len(upstreams))
+	// 使用原子操作生成随机数，避免锁竞争
+	// 简单的线性同余生成器，适合快速随机选择
+	seed := atomic.AddUint64(&b.seed, 1)
+	index := int(seed % uint64(len(upstreams)))
+	
 	return upstreams[index], nil
 }
 

@@ -208,6 +208,63 @@ func BenchmarkRoundRobinBalancer_Select(b *testing.B) {
 	}
 }
 
+// BenchmarkRoundRobinBalancer_Select_Concurrent 并发性能测试
+func BenchmarkRoundRobinBalancer_Select_Concurrent(b *testing.B) {
+	upstreams := []Upstream{
+		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
+		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
+		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
+	}
+
+	balancer := NewRRBalancer()
+	ctx := context.Background()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = balancer.Select(ctx, upstreams)
+		}
+	})
+}
+
+// BenchmarkWeightedRRBalancer_Select_Concurrent 加权轮询并发性能测试
+func BenchmarkWeightedRRBalancer_Select_Concurrent(b *testing.B) {
+	upstreams := []Upstream{
+		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
+		{Name: "upstream2", URL: "http://example2.com", Weight: 2},
+		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
+	}
+
+	balancer := NewWeightedRRBalancer()
+	ctx := context.Background()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = balancer.Select(ctx, upstreams)
+		}
+	})
+}
+
+// BenchmarkRandomBalancer_Select_Concurrent 随机负载均衡器并发性能测试
+func BenchmarkRandomBalancer_Select_Concurrent(b *testing.B) {
+	upstreams := []Upstream{
+		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
+		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
+		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
+	}
+
+	balancer := NewRandomBalancer()
+	ctx := context.Background()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = balancer.Select(ctx, upstreams)
+		}
+	})
+}
+
 func TestCreateFromConfig(t *testing.T) {
 	tests := []struct {
 		name      string
