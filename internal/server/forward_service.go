@@ -29,6 +29,20 @@ const (
 	MaxRequestBodySize = 64 << 20 // 64MB
 )
 
+// 流式传输缓冲区对象池，减少频繁的内存分配
+var streamingBufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 4096)
+	},
+}
+
+// 非流式传输缓冲区对象池，减少频繁的内存分配
+var nonStreamingBufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 32*1024)
+	},
+}
+
 // ForwardService 代表转发服务，处理客户端请求转发逻辑
 type ForwardService struct {
 	mu           sync.RWMutex          // 读写锁，保护并发访问
@@ -130,7 +144,8 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 
 // buildUpstreams 构建上游服务列表
 func (s *ForwardService) buildUpstreams(group *config.UpstreamGroupConfig, globalConfig *config.Config) error {
-	upstreamConfigMap := make(map[string]*config.UpstreamConfig)
+	// 预分配map容量，减少rehash操作
+	upstreamConfigMap := make(map[string]*config.UpstreamConfig, len(globalConfig.Upstreams))
 	for i := range globalConfig.Upstreams {
 		upstreamConfigMap[globalConfig.Upstreams[i].Name] = &globalConfig.Upstreams[i]
 	}
@@ -553,14 +568,16 @@ func (s *ForwardService) isStreamingResponse(resp *http.Response) bool {
 
 // forwardStreamingResponse 转发流式响应
 func (s *ForwardService) forwardStreamingResponse(c *gin.Context, resp *http.Response) {
-	// 移除重复的头部设置，因为已经在 forwardResponse 中复制了所有头部
+	// 从对象池获取缓冲区
+	buffer := streamingBufferPool.Get()
+	defer streamingBufferPool.Put(buffer)
+	bufSlice := buffer.([]byte) // 使用完整的缓冲区，不截断为0长度
 
 	// 流式复制响应体
-	buffer := make([]byte, 4096)
 	for {
-		n, err := resp.Body.Read(buffer)
+		n, err := resp.Body.Read(bufSlice)
 		if n > 0 {
-			if _, writeErr := c.Writer.Write(buffer[:n]); writeErr != nil {
+			if _, writeErr := c.Writer.Write(bufSlice[:n]); writeErr != nil {
 				s.logger.Error(writeErr, "Failed to write streaming response")
 				break
 			}
@@ -577,8 +594,13 @@ func (s *ForwardService) forwardStreamingResponse(c *gin.Context, resp *http.Res
 
 // forwardRegularResponse 转发常规响应
 func (s *ForwardService) forwardRegularResponse(c *gin.Context, resp *http.Response) {
+	// 从对象池获取缓冲区
+	buffer := nonStreamingBufferPool.Get()
+	defer nonStreamingBufferPool.Put(buffer)
+	bufSlice := buffer.([]byte) // 使用完整的缓冲区，不截断为0长度
+
 	// 直接复制响应体
-	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
+	if _, err := io.CopyBuffer(c.Writer, resp.Body, bufSlice); err != nil {
 		s.logger.Error(err, "Failed to copy response body")
 	}
 }
@@ -697,17 +719,17 @@ func (s *ForwardService) IsRunning() bool {
 func (s *ForwardService) initializeMetricsCollector() error {
 	// 使用全局 MetricsRegistry 获取或创建唯一的共享收集器
 	globalRegistry := metrics.GetGlobalRegistry()
-	
+
 	// 使用固定名称 "global" 确保所有服务共享同一个收集器
 	const globalCollectorName = "global"
-	
+
 	// 如果收集器已经存在，直接使用
 	if existingCollector, exists := globalRegistry.GetCollector(globalCollectorName); exists {
 		s.metricsCollector = existingCollector
 		s.logger.V(1).Info("Reusing global metrics collector", "service", s.config.Name)
 		return nil
 	}
-	
+
 	// 创建全局共享收集器配置
 	config := &metrics.Config{
 		Type:      "prometheus",
@@ -715,7 +737,7 @@ func (s *ForwardService) initializeMetricsCollector() error {
 		Namespace: "llmproxy",
 		Subsystem: "",
 	}
-	
+
 	// 创建新的全局共享收集器
 	collector, err := globalRegistry.CreateSharedCollector(globalCollectorName, config)
 	if err != nil {

@@ -31,7 +31,7 @@ func NewConnectionPool(cfg *config.HTTPClientConfig) *ConnectionPool {
 
 		// 拨号配置
 		DialContext: (&net.Dialer{
-			KeepAlive: time.Duration(cfg.KeepAlive) * time.Second,
+			KeepAlive: time.Duration(cfg.KeepAlive) * time.Millisecond,
 		}).DialContext,
 
 		// 期望继续超时

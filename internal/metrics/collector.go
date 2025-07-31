@@ -2,11 +2,28 @@ package metrics
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// 预定义常见状态码字符串，避免频繁的格式化操作
+var statusCodeStrings = map[int]string{
+	200: "200", 201: "201", 202: "202", 204: "204",
+	400: "400", 401: "401", 403: "403", 404: "404", 429: "429",
+	500: "500", 502: "502", 503: "503", 504: "504",
+}
+
+// formatStatusCode 高效地将状态码转换为字符串
+func formatStatusCode(statusCode int) string {
+	if str, exists := statusCodeStrings[statusCode]; exists {
+		return str
+	}
+	// 对于不常见的状态码，使用strconv.Itoa，比fmt.Sprintf更高效
+	return strconv.Itoa(statusCode)
+}
 
 // prometheusCollector 基于 Prometheus 的指标收集器实现
 type prometheusCollector struct {
@@ -230,10 +247,7 @@ func (c *prometheusCollector) RecordRequest(forwardName, method, path string) {
 
 // RecordResponse 记录 HTTP 响应
 func (c *prometheusCollector) RecordResponse(forwardName, method, path string, statusCode int, duration time.Duration, requestSize, responseSize int64) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	statusCodeStr := fmt.Sprintf("%d", statusCode)
+	statusCodeStr := formatStatusCode(statusCode)
 
 	// 记录请求总数
 	c.httpRequestsTotal.WithLabelValues(forwardName, method, path, statusCodeStr).Inc()
@@ -267,10 +281,7 @@ func (c *prometheusCollector) RecordUpstreamRequest(upstreamGroup, upstreamName,
 
 // RecordUpstreamResponse 记录上游响应
 func (c *prometheusCollector) RecordUpstreamResponse(upstreamGroup, upstreamName, method string, statusCode int, duration time.Duration) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	statusCodeStr := fmt.Sprintf("%d", statusCode)
+	statusCodeStr := formatStatusCode(statusCode)
 
 	// 记录上游请求总数
 	c.upstreamRequestsTotal.WithLabelValues(upstreamGroup, upstreamName, method, statusCodeStr).Inc()
@@ -281,9 +292,6 @@ func (c *prometheusCollector) RecordUpstreamResponse(upstreamGroup, upstreamName
 
 // RecordUpstreamError 记录上游错误
 func (c *prometheusCollector) RecordUpstreamError(upstreamGroup, upstreamName, errorType string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.upstreamErrorsTotal.WithLabelValues(upstreamGroup, upstreamName, errorType).Inc()
 }
 
@@ -291,25 +299,16 @@ func (c *prometheusCollector) RecordUpstreamError(upstreamGroup, upstreamName, e
 
 // RecordCircuitBreakerState 记录断路器状态
 func (c *prometheusCollector) RecordCircuitBreakerState(upstreamGroup, upstreamName string, state int) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.circuitBreakerState.WithLabelValues(upstreamGroup, upstreamName).Set(float64(state))
 }
 
 // RecordCircuitBreakerRequest 记录断路器请求
 func (c *prometheusCollector) RecordCircuitBreakerRequest(upstreamGroup, upstreamName, result string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.circuitBreakerRequestsTotal.WithLabelValues(upstreamGroup, upstreamName, result).Inc()
 }
 
 // RecordCircuitBreakerStateChange 记录断路器状态变化
 func (c *prometheusCollector) RecordCircuitBreakerStateChange(upstreamGroup, upstreamName, fromState, toState string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.circuitBreakerStateChanges.WithLabelValues(upstreamGroup, upstreamName, fromState, toState).Inc()
 }
 
@@ -317,17 +316,11 @@ func (c *prometheusCollector) RecordCircuitBreakerStateChange(upstreamGroup, ups
 
 // RecordLoadBalancerSelection 记录负载均衡器选择
 func (c *prometheusCollector) RecordLoadBalancerSelection(upstreamGroup, upstreamName, balancerType string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.loadBalancerSelectionsTotal.WithLabelValues(upstreamGroup, upstreamName, balancerType).Inc()
 }
 
 // RecordUpstreamHealthStatus 记录上游健康状态
 func (c *prometheusCollector) RecordUpstreamHealthStatus(upstreamGroup, upstreamName string, healthy bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	healthValue := float64(0)
 	if healthy {
 		healthValue = 1
@@ -339,17 +332,11 @@ func (c *prometheusCollector) RecordUpstreamHealthStatus(upstreamGroup, upstream
 
 // RecordActiveConnections 记录活跃连接数
 func (c *prometheusCollector) RecordActiveConnections(forwardName string, connections int) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.activeConnections.WithLabelValues(forwardName).Set(float64(connections))
 }
 
 // RecordRateLimitRejection 记录限流拒绝
 func (c *prometheusCollector) RecordRateLimitRejection(forwardName, limitType string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	c.rateLimitRejectionsTotal.WithLabelValues(forwardName, limitType).Inc()
 }
 
