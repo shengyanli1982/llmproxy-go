@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v3"
@@ -24,6 +26,7 @@ func NewManager() *Manager {
 	// 注册自定义验证器
 	validate.RegisterValidation("auth_conditional", validateAuthConditional)
 	validate.RegisterValidation("header_conditional", validateHeaderConditional)
+	validate.RegisterValidation("http_url", validateHTTPURL)
 
 	return &Manager{
 		validator: validate,
@@ -356,4 +359,31 @@ func validateHeaderConditional(fl validator.FieldLevel) bool {
 	default:
 		return false // 未知的操作类型
 	}
+}
+
+// validateHTTPURL 验证URL必须使用HTTP或HTTPS协议
+func validateHTTPURL(fl validator.FieldLevel) bool {
+	urlStr := fl.Field().String()
+	if urlStr == "" {
+		return false // 空URL无效
+	}
+
+	// 解析URL
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false // URL格式无效
+	}
+
+	// 检查协议必须是http或https（大小写不敏感）
+	scheme := strings.ToLower(parsedURL.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return false // 协议必须是http或https
+	}
+
+	// 检查必须包含有效的host
+	if parsedURL.Host == "" {
+		return false // 必须包含host
+	}
+
+	return true
 }

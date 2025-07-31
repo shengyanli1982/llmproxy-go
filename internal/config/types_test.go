@@ -385,6 +385,210 @@ func TestHeaderOpConfig_ConditionalValidation(t *testing.T) {
 	}
 }
 
+func TestUpstreamConfig_HTTPURLValidation(t *testing.T) {
+	manager := NewManager()
+
+	tests := []struct {
+		name    string
+		config  UpstreamConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid http URL",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "http://example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid https URL",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "https://example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid https URL with port and path",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "https://api.example.com:8080/v1/chat/completions",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid http URL with credentials",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "http://user:pass@example.com:3000",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid https URL with IPv6",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "https://[::1]:8080",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid HTTP URL (uppercase)",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "HTTP://EXAMPLE.COM",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid ftp protocol",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "ftp://example.com",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "invalid file protocol",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "file:///path/to/file",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "missing protocol",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "example.com",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "empty URL",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "",
+			},
+			wantErr: true,
+			errMsg:  "required",
+		},
+		{
+			name: "URL without host",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "http://",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "URL without host but with path",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "https:///path",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "invalid URL format",
+			config: UpstreamConfig{
+				Name: "test-upstream",
+				URL:  "http://invalid url with spaces",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := manager.validator.Struct(&tt.config)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestProxyConfig_HTTPURLValidation(t *testing.T) {
+	manager := NewManager()
+
+	tests := []struct {
+		name    string
+		config  ProxyConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid http proxy URL",
+			config: ProxyConfig{
+				URL: "http://proxy.example.com:8080",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid https proxy URL",
+			config: ProxyConfig{
+				URL: "https://proxy.example.com:8080",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid proxy URL with credentials",
+			config: ProxyConfig{
+				URL: "http://user:pass@proxy.example.com:8080",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid socks5 protocol",
+			config: ProxyConfig{
+				URL: "socks5://proxy.example.com:1080",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "missing protocol",
+			config: ProxyConfig{
+				URL: "proxy.example.com:8080",
+			},
+			wantErr: true,
+			errMsg:  "http_url",
+		},
+		{
+			name: "empty URL",
+			config: ProxyConfig{
+				URL: "",
+			},
+			wantErr: true,
+			errMsg:  "required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := manager.validator.Struct(&tt.config)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestBreakerConfig_OptionalValidation(t *testing.T) {
 	validator := validator.New()
 

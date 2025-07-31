@@ -48,7 +48,7 @@ type TimeoutConfig struct {
 // UpstreamConfig 代表上游服务配置，定义后端LLM API服务的连接参数
 type UpstreamConfig struct {
 	Name      string           `yaml:"name" validate:"required"`
-	URL       string           `yaml:"url" validate:"required,url"`
+	URL       string           `yaml:"url" validate:"required,http_url"`
 	Auth      *AuthConfig      `yaml:"auth,omitempty"`
 	Headers   []HeaderOpConfig `yaml:"headers,omitempty"`
 	Breaker   *BreakerConfig   `yaml:"breaker,omitempty"`
@@ -120,5 +120,5 @@ type RetryConfig struct {
 
 // ProxyConfig 代表代理配置，设置HTTP代理服务器
 type ProxyConfig struct {
-	URL string `yaml:"url" validate:"required,url"`
+	URL string `yaml:"url" validate:"required,http_url"`
 }
