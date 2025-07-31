@@ -206,14 +206,7 @@ func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) err
 func (s *ForwardService) initializeCircuitBreakers() error {
 	for _, upstream := range s.upstreams {
 		if upstream.Config.Breaker != nil {
-			settings := breaker.CreateFromConfig(
-				upstream.Name,
-				3,              // maxRequests
-				10*time.Second, // interval
-				time.Duration(upstream.Config.Breaker.Cooldown)*time.Millisecond, // timeout
-				upstream.Config.Breaker.Threshold,                                // failureThreshold
-				10,                                                               // minRequests
-			)
+			settings := breaker.CreateFromConfig(upstream.Name, upstream.Config.Breaker)
 
 			cb, err := s.breakerFactory.Create(upstream.Name, settings)
 			if err != nil {

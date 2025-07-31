@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,7 +27,6 @@ type httpClient struct {
 	name         string
 	client       *http.Client
 	pool         *ConnectionPool
-	retryHandler *RetryHandler
 	proxyHandler *ProxyHandler
 	config       *config.HTTPClientConfig
 	closed       bool
@@ -45,9 +43,6 @@ type httpClient struct {
 func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 	// 创建连接池
 	pool := NewConnectionPool(cfg)
-
-	// 创建重试处理器
-	retryHandler := NewRetryHandler(cfg)
 
 	// 创建代理处理器
 	var proxyHandler *ProxyHandler
@@ -78,7 +73,6 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 		name:           fmt.Sprintf("http-client-%d", time.Now().UnixNano()),
 		client:         client,
 		pool:           pool,
-		retryHandler:   retryHandler,
 		proxyHandler:   proxyHandler,
 		config:         cfg,
 		closed:         false,
@@ -111,16 +105,8 @@ func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Re
 		return nil, fmt.Errorf("failed to prepare request: %w", err)
 	}
 
-	// 创建上下文
-	ctx := req.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	// 执行请求（带重试）
-	return c.retryHandler.DoWithRetry(ctx, func() (*http.Response, error) {
-		return c.client.Do(req)
-	})
+	// 执行请求
+	return c.client.Do(req)
 }
 
 // prepareRequest 准备HTTP请求，设置目标URL和认证信息

@@ -601,16 +601,20 @@ func TestBreakerConfig_OptionalValidation(t *testing.T) {
 		{
 			name: "valid config with all fields",
 			config: BreakerConfig{
-				Threshold: 0.5,
-				Cooldown:  30000,
+				Threshold:   0.5,
+				Cooldown:    30000,
+				MaxRequests: 3,
+				Interval:    10000,
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with zero values (use defaults)",
 			config: BreakerConfig{
-				Threshold: 0,
-				Cooldown:  0,
+				Threshold:   0,
+				Cooldown:    0,
+				MaxRequests: 0,
+				Interval:    0,
 			},
 			wantErr: false,
 		},

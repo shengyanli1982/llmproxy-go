@@ -30,15 +30,11 @@ func createMinimalConfig() *config.HTTPClientConfig {
 	}
 }
 
-// createRetryConfig 创建启用重试的配置
+// createRetryConfig 创建基本配置（重试功能已移除）
 func createRetryConfig() *config.HTTPClientConfig {
 	return &config.HTTPClientConfig{
 		Agent:     "LLMProxy/1.0",
 		KeepAlive: 60,
-		Retry: &config.RetryConfig{
-			Attempts: 2,
-			Initial:  100,
-		},
 	}
 }
 
@@ -65,10 +61,6 @@ func createFullConfig() *config.HTTPClientConfig {
 			Connect: 10000,
 			Request: 60000,
 			Idle:    90000,
-		},
-		Retry: &config.RetryConfig{
-			Attempts: 3,
-			Initial:  500,
 		},
 		Proxy: &config.ProxyConfig{
 			URL: "http://proxy.example.com:8080",
@@ -146,6 +138,14 @@ func createErrorServer(statusCode int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(statusCode)
 		_, _ = w.Write([]byte("error response"))
+	}))
+}
+
+// createSuccessServer 创建成功测试服务器
+func createSuccessServer(response string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(response))
 	}))
 }
 
@@ -257,17 +257,14 @@ func TestHTTPClient_ErrorHandling(t *testing.T) {
 	})
 }
 
-func TestHTTPClient_RetryBehavior(t *testing.T) {
+func TestHTTPClient_BasicBehavior(t *testing.T) {
 	factory := NewFactory()
 
-	t.Run("retry enabled - success after retry", func(t *testing.T) {
-		server, attempts := createRetryServer(3) // 第3次成功
+	t.Run("successful request", func(t *testing.T) {
+		server := createSuccessServer("success response")
 		defer server.Close()
 
 		cfg := createRetryConfig()
-		cfg.Retry.Attempts = 3
-		cfg.Retry.Initial = 50 // 50ms延迟
-
 		client, err := factory.Create(cfg)
 		require.NoError(t, err)
 		defer client.Close()
@@ -280,38 +277,15 @@ func TestHTTPClient_RetryBehavior(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, int32(3), atomic.LoadInt32(attempts))
-
 		body, _ := io.ReadAll(resp.Body)
-		assert.Equal(t, "success after retry", string(body))
+		assert.Equal(t, "success response", string(body))
 	})
 
-	t.Run("retry enabled - max retries exceeded", func(t *testing.T) {
+	t.Run("server error response", func(t *testing.T) {
 		server := createErrorServer(http.StatusInternalServerError)
 		defer server.Close()
 
-		cfg := createRetryConfig()
-		cfg.Retry.Attempts = 2
-		cfg.Retry.Initial = 10 // 10ms延迟
-
-		client, err := factory.Create(cfg)
-		require.NoError(t, err)
-		defer client.Close()
-
-		req, _ := http.NewRequest("GET", "/test", nil)
-		upstream := createTestUpstream(server.URL)
-
-		_, err = client.Do(req, upstream)
-		// 重试库在超过最大重试次数后会返回错误
-		assert.Error(t, err)
-	})
-
-	t.Run("retry disabled", func(t *testing.T) {
-		server := createErrorServer(http.StatusInternalServerError)
-		defer server.Close()
-
-		cfg := createNoRetryConfig() // 没有Retry配置
-
+		cfg := createNoRetryConfig()
 		client, err := factory.Create(cfg)
 		require.NoError(t, err)
 		defer client.Close()
@@ -323,20 +297,19 @@ func TestHTTPClient_RetryBehavior(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
-		// 应该立即返回错误，不重试
+		// 应该直接返回服务器错误，不重试
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
 
-	t.Run("retry with different status codes", func(t *testing.T) {
+	t.Run("different status codes", func(t *testing.T) {
 		testCases := []struct {
 			name       string
 			statusCode int
-			expectErr  bool
 		}{
-			{"success", http.StatusOK, false},
-			{"client error", http.StatusBadRequest, false},         // 4xx不重试，直接返回
-			{"server error", http.StatusInternalServerError, true}, // 5xx重试，最终失败
-			{"bad gateway", http.StatusBadGateway, true},           // 5xx重试，最终失败
+			{"success", http.StatusOK},
+			{"client error", http.StatusBadRequest},
+			{"server error", http.StatusInternalServerError},
+			{"bad gateway", http.StatusBadGateway},
 		}
 
 		for _, tc := range testCases {
@@ -345,8 +318,6 @@ func TestHTTPClient_RetryBehavior(t *testing.T) {
 				defer server.Close()
 
 				cfg := createRetryConfig()
-				cfg.Retry.Attempts = 2
-
 				client, err := factory.Create(cfg)
 				require.NoError(t, err)
 				defer client.Close()
@@ -355,16 +326,9 @@ func TestHTTPClient_RetryBehavior(t *testing.T) {
 				upstream := createTestUpstream(server.URL)
 
 				resp, err := client.Do(req, upstream)
-
-				if tc.expectErr {
-					// 5xx状态码会触发重试，最终超过重试次数返回错误
-					assert.Error(t, err)
-				} else {
-					// 2xx和4xx状态码不会重试，直接返回响应
-					require.NoError(t, err)
-					defer resp.Body.Close()
-					assert.Equal(t, tc.statusCode, resp.StatusCode)
-				}
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				assert.Equal(t, tc.statusCode, resp.StatusCode)
 			})
 		}
 	})
@@ -1434,53 +1398,6 @@ func TestHTTPClientFactory(t *testing.T) {
 
 // 组件测试
 
-func TestRetryHandler(t *testing.T) {
-	t.Run("retry enabled", func(t *testing.T) {
-		cfg := createRetryConfig()
-		handler := NewRetryHandler(cfg)
-
-		assert.True(t, handler.IsEnabled())
-
-		config := handler.GetConfig()
-		assert.Equal(t, true, config["enabled"])
-		assert.Equal(t, 2, config["max_retries"])
-		assert.Equal(t, 100, config["retry_delay"])
-	})
-
-	t.Run("retry disabled", func(t *testing.T) {
-		cfg := createNoRetryConfig()
-		handler := NewRetryHandler(cfg)
-
-		assert.False(t, handler.IsEnabled())
-
-		config := handler.GetConfig()
-		assert.Equal(t, false, config["enabled"])
-		assert.Equal(t, 0, config["max_retries"])
-		assert.Equal(t, 0, config["retry_delay"])
-	})
-
-	t.Run("retry execution", func(t *testing.T) {
-		cfg := createRetryConfig()
-		cfg.Retry.Attempts = 3
-		cfg.Retry.Initial = 10
-
-		handler := NewRetryHandler(cfg)
-
-		var attempts int32
-		ctx := context.Background()
-
-		// 测试成功的情况
-		resp, err := handler.DoWithRetry(ctx, func() (*http.Response, error) {
-			atomic.AddInt32(&attempts, 1)
-			return &http.Response{StatusCode: 200}, nil
-		})
-
-		require.NoError(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, int32(1), atomic.LoadInt32(&attempts))
-	})
-}
-
 func TestConnectionPool(t *testing.T) {
 	t.Run("with connect config", func(t *testing.T) {
 		cfg := createConnectConfig(200, 20, 100)
@@ -1676,10 +1593,6 @@ func TestHTTPClient_ProxyRetryIntegration(t *testing.T) {
 		cfg := &config.HTTPClientConfig{
 			Agent:     "LLMProxy/1.0",
 			KeepAlive: 60,
-			Retry: &config.RetryConfig{
-				Attempts: 2,
-				Initial:  100,
-			},
 			Proxy: &config.ProxyConfig{
 				URL: "http://test-proxy.example.com:3128",
 			},

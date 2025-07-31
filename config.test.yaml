@@ -57,6 +57,8 @@ upstreams:
     breaker:
       threshold: 0.6
       cooldown: 30000
+      maxRequests: 5
+      interval: 15000
     # 限速器测试
     ratelimit:
       perSecond: 20
@@ -79,9 +81,6 @@ upstreamGroups:
         idlePerHost: 5
         maxPerHost: 20
       timeout:
-        connect: 15
-        request: 300
-        idle: 90
-      retry:
-        attempts: 2
-        initial: 1000
+        connect: 15000
+        request: 300000
+        idle: 90000

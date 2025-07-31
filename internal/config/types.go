@@ -72,8 +72,10 @@ type HeaderOpConfig struct {
 
 // BreakerConfig 代表熔断器配置，用于保护上游服务避免过载
 type BreakerConfig struct {
-	Threshold float64 `yaml:"threshold,omitempty" validate:"omitempty,min=0.01,max=1.0"`
-	Cooldown  int     `yaml:"cooldown,omitempty" validate:"omitempty,min=1000,max=3600000"` // 单位：毫秒
+	Threshold   float64 `yaml:"threshold,omitempty" validate:"omitempty,min=0.01,max=1.0"`
+	Cooldown    int     `yaml:"cooldown,omitempty" validate:"omitempty,min=1000,max=3600000"` // 单位：毫秒，熔断器开放状态持续时间
+	MaxRequests uint32  `yaml:"maxRequests,omitempty" validate:"omitempty,min=1,max=100"`     // 半开状态下允许通过的最大请求数
+	Interval    int     `yaml:"interval,omitempty" validate:"omitempty,min=1000,max=3600000"` // 单位：毫秒，闭合状态下统计周期重置间隔
 }
 
 // UpstreamGroupConfig 代表上游组配置，将多个上游服务组织为一个逻辑单元
@@ -101,7 +103,6 @@ type HTTPClientConfig struct {
 	KeepAlive int            `yaml:"keepalive" validate:"min=0,max=600000"` // 单位：毫秒
 	Connect   *ConnectConfig `yaml:"connect,omitempty"`
 	Timeout   *TimeoutConfig `yaml:"timeout,omitempty"`
-	Retry     *RetryConfig   `yaml:"retry,omitempty"`
 	Proxy     *ProxyConfig   `yaml:"proxy,omitempty"`
 }
 
@@ -110,12 +111,6 @@ type ConnectConfig struct {
 	IdleTotal   int `yaml:"idleTotal" validate:"min=0,max=1000"`
 	IdlePerHost int `yaml:"idlePerHost" validate:"min=0,max=100"`
 	MaxPerHost  int `yaml:"maxPerHost" validate:"min=0,max=500"`
-}
-
-// RetryConfig 代表重试配置，定义失败请求的重试策略
-type RetryConfig struct {
-	Attempts int `yaml:"attempts" validate:"min=1,max=120"`
-	Initial  int `yaml:"initial" validate:"min=100,max=3600000"` // 单位：毫秒
 }
 
 // ProxyConfig 代表代理配置，设置HTTP代理服务器
