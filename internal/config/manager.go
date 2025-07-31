@@ -22,15 +22,25 @@ type Manager struct {
 }
 
 // NewManager 创建新的配置管理器实例
-func NewManager() *Manager {
+func NewManager() (*Manager, error) {
+	var err error
 	// 注册自定义验证器
-	validate.RegisterValidation("auth_conditional", validateAuthConditional)
-	validate.RegisterValidation("header_conditional", validateHeaderConditional)
-	validate.RegisterValidation("http_url", validateHTTPURL)
+	err = validate.RegisterValidation("auth_conditional", validateAuthConditional)
+	if err != nil {
+		return nil, err
+	}
+	err = validate.RegisterValidation("header_conditional", validateHeaderConditional)
+	if err != nil {
+		return nil, err
+	}
+	err = validate.RegisterValidation("http_url", validateHTTPURL)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Manager{
 		validator: validate,
-	}
+	}, nil
 }
 
 // LoadFromFile 从指定路径加载配置文件并进行验证

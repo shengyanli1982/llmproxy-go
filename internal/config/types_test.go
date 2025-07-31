@@ -228,7 +228,10 @@ func TestHTTPClientConfig_YAMLTags(t *testing.T) {
 }
 
 func TestAuthConfig_ConditionalValidation(t *testing.T) {
-	manager := NewManager()
+	manager, err := NewManager()
+	if err != nil {
+		t.Fatalf("failed to create configuration manager: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -309,7 +312,10 @@ func TestAuthConfig_ConditionalValidation(t *testing.T) {
 }
 
 func TestHeaderOpConfig_ConditionalValidation(t *testing.T) {
-	manager := NewManager()
+	manager, err := NewManager()
+	if err != nil {
+		t.Fatalf("failed to create configuration manager: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -386,7 +392,10 @@ func TestHeaderOpConfig_ConditionalValidation(t *testing.T) {
 }
 
 func TestUpstreamConfig_HTTPURLValidation(t *testing.T) {
-	manager := NewManager()
+	manager, err := NewManager()
+	if err != nil {
+		t.Fatalf("failed to create configuration manager: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -521,7 +530,10 @@ func TestUpstreamConfig_HTTPURLValidation(t *testing.T) {
 }
 
 func TestProxyConfig_HTTPURLValidation(t *testing.T) {
-	manager := NewManager()
+	manager, err := NewManager()
+	if err != nil {
+		t.Fatalf("failed to create configuration manager: %v", err)
+	}
 
 	tests := []struct {
 		name    string

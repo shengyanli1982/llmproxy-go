@@ -87,7 +87,10 @@ func initLogger(releaseMode, jsonOutput bool) (*logr.Logger, *law.WriteAsyncer) 
 // initConfig 初始化配置管理器
 // configPath: 配置文件路径
 func initConfig(configPath string) (*config.Manager, *config.Config, error) {
-	configManager := config.NewManager()
+	configManager, err := config.NewManager()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create configuration manager: %w", err)
+	}
 	if err := configManager.LoadFromFile(configPath); err != nil {
 		return nil, nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
