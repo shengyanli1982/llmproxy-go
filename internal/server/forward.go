@@ -119,8 +119,11 @@ func (s *ForwardServer) IsRunning() bool {
 	return s.httpEngine.IsRunning()
 }
 
-// GetEndpoint 获取服务器监听地址
+// GetEndpoint 获取服务器实际监听地址（运行时分配的地址）
 func (s *ForwardServer) GetEndpoint() string {
+	if s.httpEngine != nil {
+		return s.httpEngine.GetListenEndpoint()
+	}
 	return s.endpoint
 }
 
