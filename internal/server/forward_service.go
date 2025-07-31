@@ -458,9 +458,7 @@ func (s *ForwardService) isStreamingResponse(resp *http.Response) bool {
 
 // forwardStreamingResponse 转发流式响应
 func (s *ForwardService) forwardStreamingResponse(c *gin.Context, resp *http.Response) {
-	// 确保响应支持流式传输
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
+	// 移除重复的头部设置，因为已经在 forwardResponse 中复制了所有头部
 
 	// 流式复制响应体
 	buffer := make([]byte, 4096)
@@ -471,7 +469,7 @@ func (s *ForwardService) forwardStreamingResponse(c *gin.Context, resp *http.Res
 				s.logger.Error(writeErr, "Failed to write streaming response")
 				break
 			}
-			c.Writer.Flush()
+			// 移除 Flush() 调用以避免 orbit 框架的双写问题
 		}
 		if err != nil {
 			if err != io.EOF {
