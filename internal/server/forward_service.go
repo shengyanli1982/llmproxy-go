@@ -17,6 +17,7 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/client"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/shengyanli1982/llmproxy-go/internal/headers"
+	"github.com/shengyanli1982/llmproxy-go/internal/metrics"
 	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
 	"github.com/shengyanli1982/llmproxy-go/internal/response"
 	"github.com/sony/gobreaker"
@@ -36,12 +37,13 @@ type ForwardService struct {
 	logger       *logr.Logger          // 日志记录器
 
 	// 功能模块
-	loadBalancer   balance.LoadBalancer           // 负载均衡器
-	httpClient     client.HTTPClient              // HTTP客户端
-	rateLimitMW    *ratelimit.RateLimitMiddleware // 限流中间件
-	authFactory    auth.AuthenticatorFactory      // 认证工厂
-	headerOperator headers.HeaderOperator         // 头部操作器
-	breakerFactory breaker.CircuitBreakerFactory  // 熔断器工厂
+	loadBalancer     balance.LoadBalancer           // 负载均衡器
+	httpClient       client.HTTPClient              // HTTP客户端
+	rateLimitMW      *ratelimit.RateLimitMiddleware // 限流中间件
+	authFactory      auth.AuthenticatorFactory      // 认证工厂
+	headerOperator   headers.HeaderOperator         // 头部操作器
+	breakerFactory   breaker.CircuitBreakerFactory  // 熔断器工厂
+	metricsCollector metrics.MetricsCollector       // 指标收集器
 
 	// 运行时数据
 	upstreams       []balance.Upstream                // 上游服务列表
@@ -116,6 +118,11 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 	// 初始化熔断器
 	if err := s.initializeCircuitBreakers(); err != nil {
 		return fmt.Errorf("failed to initialize circuit breakers: %w", err)
+	}
+
+	// 初始化指标收集器
+	if err := s.initializeMetricsCollector(); err != nil {
+		return fmt.Errorf("failed to initialize metrics collector: %w", err)
 	}
 
 	return nil
@@ -276,12 +283,22 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 func (s *ForwardService) handleForward(c *gin.Context) {
 	startTime := time.Now()
 
+	// 记录请求开始
+	if s.metricsCollector != nil {
+		s.metricsCollector.RecordRequest(s.config.Name, c.Request.Method, c.Request.URL.Path)
+	}
+
 	// 处理请求，如果有错误，直接返回错误响应
 	if err := s.processRequest(c, startTime); err != nil {
 		s.logger.Error(err, "Request processing failed",
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
 			"client_ip", c.ClientIP())
+
+		// 记录错误
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordError(s.config.Name, "processing_error")
+		}
 
 		s.sendErrorResponse(c, http.StatusInternalServerError, "Internal server error")
 	}
@@ -296,6 +313,12 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 	upstream, err := s.loadBalancer.Select(ctx, s.upstreams)
 	if err != nil {
 		s.logger.Error(err, "Failed to select upstream")
+
+		// 记录上游错误
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, "unknown", "selection_failed")
+		}
+
 		s.sendErrorResponse(c, http.StatusServiceUnavailable, "No available upstream")
 		return fmt.Errorf("failed to select upstream: %w", err)
 	}
@@ -304,6 +327,12 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 	if s.rateLimitMW != nil && s.rateLimitMW.IsEnabled() {
 		if !s.rateLimitMW.AllowUpstream(upstream.Name) {
 			s.logger.V(1).Info("Rate limit exceeded for upstream", "upstream", upstream.Name)
+
+			// 记录限流拒绝
+			if s.metricsCollector != nil {
+				s.metricsCollector.RecordRateLimitRejection(s.config.Name, "upstream")
+			}
+
 			s.sendErrorResponse(c, http.StatusTooManyRequests, "Too many requests to upstream service")
 			return fmt.Errorf("rate limit exceeded for upstream: %s", upstream.Name)
 		}
@@ -311,7 +340,19 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 
 	// 3. 检查熔断器状态
 	if cb, exists := s.circuitBreakers[upstream.Name]; exists {
+		// 记录断路器状态
+		if s.metricsCollector != nil {
+			state := int(cb.State())
+			s.metricsCollector.RecordCircuitBreakerState(s.config.DefaultGroup, upstream.Name, state)
+		}
+
 		if cb.State() == gobreaker.StateOpen {
+			// 记录断路器拒绝
+			if s.metricsCollector != nil {
+				s.metricsCollector.RecordCircuitBreakerRequest(s.config.DefaultGroup, upstream.Name, "rejected")
+				s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "circuit_breaker")
+			}
+
 			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Service temporarily unavailable")
 			return fmt.Errorf("circuit breaker is open for upstream: %s", upstream.Name)
 		}
@@ -333,14 +374,33 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 		})
 		if err != nil {
 			s.logger.Error(err, "Circuit breaker execution failed", "upstream", upstream.Name)
+
+			// 记录断路器失败和上游错误
+			if s.metricsCollector != nil {
+				s.metricsCollector.RecordCircuitBreakerRequest(s.config.DefaultGroup, upstream.Name, "failure")
+				s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "circuit_breaker_failure")
+			}
+
 			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Upstream service unavailable")
 			return fmt.Errorf("circuit breaker execution failed for upstream %s: %w", upstream.Name, err)
 		}
+
+		// 记录断路器成功
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordCircuitBreakerRequest(s.config.DefaultGroup, upstream.Name, "success")
+		}
+
 		resp = result.(*http.Response)
 	} else {
 		resp, err = s.httpClient.Do(proxyReq, &upstream)
 		if err != nil {
 			s.logger.Error(err, "HTTP request failed", "upstream", upstream.Name)
+
+			// 记录上游连接错误
+			if s.metricsCollector != nil {
+				s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "connection_error")
+			}
+
 			s.sendErrorResponse(c, http.StatusBadGateway, "Upstream request failed")
 			return fmt.Errorf("HTTP request failed for upstream %s: %w", upstream.Name, err)
 		}
@@ -349,13 +409,48 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 	defer resp.Body.Close()
 
 	// 6. 计算响应时间并更新负载均衡器
-	latency := time.Since(startTime).Milliseconds()
+	duration := time.Since(startTime)
+	latency := duration.Milliseconds()
 	s.loadBalancer.UpdateLatency(upstream.Name, latency)
 
 	// 7. 转发响应
 	s.forwardResponse(c, resp)
 
-	// 8. 记录访问日志
+	// 8. 记录指标
+	if s.metricsCollector != nil {
+		// 获取请求和响应大小
+		requestSize := s.getRequestSize(req)
+		responseSize := s.getResponseSize(resp)
+
+		// 记录 HTTP 响应指标
+		s.metricsCollector.RecordResponse(
+			s.config.Name,
+			req.Method,
+			req.URL.Path,
+			resp.StatusCode,
+			duration,
+			requestSize,
+			responseSize,
+		)
+
+		// 记录上游响应指标
+		s.metricsCollector.RecordUpstreamResponse(
+			s.config.DefaultGroup,
+			upstream.Name,
+			req.Method,
+			resp.StatusCode,
+			duration,
+		)
+
+		// 记录负载均衡器选择
+		s.metricsCollector.RecordLoadBalancerSelection(
+			s.config.DefaultGroup,
+			upstream.Name,
+			s.loadBalancer.Type(),
+		)
+	}
+
+	// 9. 记录访问日志
 	s.logger.Info("Request forwarded successfully",
 		"method", req.Method,
 		"path", req.URL.Path,
@@ -596,4 +691,54 @@ func (s *ForwardService) IsRunning() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.running
+}
+
+// initializeMetricsCollector 初始化指标收集器
+func (s *ForwardService) initializeMetricsCollector() error {
+	// 使用全局 MetricsRegistry 获取或创建唯一的共享收集器
+	globalRegistry := metrics.GetGlobalRegistry()
+	
+	// 使用固定名称 "global" 确保所有服务共享同一个收集器
+	const globalCollectorName = "global"
+	
+	// 如果收集器已经存在，直接使用
+	if existingCollector, exists := globalRegistry.GetCollector(globalCollectorName); exists {
+		s.metricsCollector = existingCollector
+		s.logger.V(1).Info("Reusing global metrics collector", "service", s.config.Name)
+		return nil
+	}
+	
+	// 创建全局共享收集器配置
+	config := &metrics.Config{
+		Type:      "prometheus",
+		Enabled:   true,
+		Namespace: "llmproxy",
+		Subsystem: "",
+	}
+	
+	// 创建新的全局共享收集器
+	collector, err := globalRegistry.CreateSharedCollector(globalCollectorName, config)
+	if err != nil {
+		return fmt.Errorf("failed to create global metrics collector: %w", err)
+	}
+
+	s.metricsCollector = collector
+	s.logger.Info("Created global metrics collector", "service", s.config.Name)
+	return nil
+}
+
+// getRequestSize 获取请求体大小
+func (s *ForwardService) getRequestSize(req *http.Request) int64 {
+	if req.ContentLength > 0 {
+		return req.ContentLength
+	}
+	return 0
+}
+
+// getResponseSize 获取响应体大小
+func (s *ForwardService) getResponseSize(resp *http.Response) int64 {
+	if resp.ContentLength > 0 {
+		return resp.ContentLength
+	}
+	return 0
 }

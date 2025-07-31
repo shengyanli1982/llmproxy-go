@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/metrics"
 	"github.com/shengyanli1982/orbit"
 )
 
@@ -40,10 +41,27 @@ func NewAdminServer(debug bool, logger *logr.Logger, config *config.AdminConfig,
 		WithHttpWriteTimeout(uint32(config.Timeout.Write))
 
 	// 创建引擎选项
-	opts := orbit.DebugOptions()
+	opts := orbit.NewOptions().EnablePProf().EnableSwagger()
 	if !debug {
-		opts = orbit.ReleaseOptions()
+		opts = orbit.NewOptions()
 		cfg.WithRelease()
+	}
+
+	// 获取全局指标注册器并尝试集成到 orbit 中
+	metricsRegistry := metrics.GetGlobalRegistry()
+	if metricsRegistry != nil {
+		// 尝试设置自定义的 Prometheus Registry
+		// 注意：这可能需要 orbit 框架的特定支持
+		// 如果 orbit 不支持自定义 registry，我们将通过自定义端点提供指标
+		registry := metricsRegistry.GetRegistry()
+		if registry != nil {
+			// 这里我们尝试将自定义 registry 集成到 orbit 中
+			// 由于 orbit 框架的限制，我们可能需要使用其他方法
+			logger.Info("Custom metrics registry initialized", "collectors", metricsRegistry.CollectorCount())
+
+			// 注意：orbit 框架可能不支持自定义 prometheus registry
+			// 我们将通过 AdminService 的 /metrics 端点来暴露统一指标
+		}
 	}
 
 	// 创建 HTTP 引擎
