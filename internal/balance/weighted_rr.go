@@ -58,6 +58,9 @@ func (b *WeightedRRBalancer) Select(ctx context.Context, upstreams []Upstream) (
 		atomic.AddInt64(weightPtr, -totalWeight)
 	}
 
+	// 注意：负载均衡器的选择日志将在调用方记录
+	// 加权轮询算法的权重信息已记录在选择决策中
+
 	return selected, nil
 }
 

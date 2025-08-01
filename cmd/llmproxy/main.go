@@ -71,16 +71,16 @@ func initLogger(releaseMode, jsonOutput bool) (*logr.Logger, *law.WriteAsyncer) 
 		asyncWriter = law.NewWriteAsyncer(os.Stdout, law.DefaultConfig())
 		if jsonOutput {
 			// JSON 格式输出使用 ZapLogger
-			logger = log.NewZapLogger(zapcore.AddSync(asyncWriter)).GetLogrLogger()
+			logger = log.NewZapLogger(zapcore.AddSync(asyncWriter), releaseMode).GetLogrLogger()
 		} else {
 			// 普通格式输出使用 LogrLogger
-			logger = log.NewLogrLogger(asyncWriter).GetLogrLogger()
+			logger = log.NewLogrLogger(asyncWriter, releaseMode).GetLogrLogger()
 		}
 		return logger, asyncWriter
 	}
 
 	// 开发模式直接使用标准输出
-	logger = log.NewLogrLogger(os.Stdout).GetLogrLogger()
+	logger = log.NewLogrLogger(os.Stdout, releaseMode).GetLogrLogger()
 	return logger, nil
 }
 
@@ -127,31 +127,37 @@ func main() {
 
 	// 设置命令行参数
 	cmd := cobra.Command{
-		Use:     "llmproxy",
+		Use:     "llmproxyd",
 		Version: Version,
-		Short:   "LLMProxy is a high-performance HTTP proxy for LLM services",
-		Long: `LLMProxy is a high-performance HTTP proxy service designed for LLM APIs.
+		Short:   "Enterprise-grade LLM API proxy with intelligent load balancing and circuit breaker",
+		Long: `LLMProxy is an enterprise-grade HTTP proxy service engineered for Large Language Model APIs,
+providing production-ready reliability, performance, and observability.
 
-Core Features:
-- High-performance LLM API proxy service
-- Intelligent load balancing and circuit breaking
-- Configurable timeout and retry mechanisms
-- Real-time request rate limiting
-- Graceful shutdown support
-- JSON/Plain log output support
+>> CORE FEATURES:
+• High-performance reverse proxy optimized for LLM API characteristics
+• Intelligent load balancing (Round Robin, Weighted Round Robin, Random, IP Hash)
+• Circuit breaker with integrated retry mechanism for fault tolerance
+• Multi-layer rate limiting (IP-based and upstream-based)
+• Real-time health monitoring with Prometheus metrics
+• Flexible authentication (Bearer Token, Basic Auth, Custom Headers)
+• HTTP header manipulation (insert, replace, remove operations)
+• Graceful shutdown with connection draining
 
-Performance Characteristics:
-- Connection pool optimized for LLM APIs
-- Memory-efficient design
-- Production-grade stability
-- Asynchronous logging system
-- Smart request routing
+>> PERFORMANCE HIGHLIGHTS:
+• Connection pooling with configurable limits and keepalive
+• Asynchronous logging system for minimal I/O blocking
+• Memory-efficient request routing and processing
+• Optimized for high-throughput LLM workloads
+• Zero-downtime configuration reloading capabilities
 
-Technical Specifications:
-- Multi-upstream LLM service support
-- Automatic failover handling
-- Real-time metrics monitoring
-- Configurable compression support
+>> ENTERPRISE FEATURES:
+• Multi-upstream service aggregation (OpenAI, Anthropic, Claude, etc.)
+• Automatic failover and health checking
+• Comprehensive observability (metrics, health checks, structured logging)
+• Docker-ready with multi-architecture support
+• Production-grade security and error handling
+
+Built for reliability, scalability, and ease of operation in production environments.
 
 Author: shengyanli1982
 Repository: https://github.com/shengyanli1982/llmproxy-go`,

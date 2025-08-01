@@ -95,8 +95,8 @@ github.com/shengyanli1982/gs v0.1.5 h1:nov5bn8fffCR0Uz29ZiIsjiKxjw9o5p/PmZ01NlM6
 github.com/shengyanli1982/gs v0.1.5/go.mod h1:D71BApttgRbpQomMPWOGQQaPJTypfvsbktSIBzei0yU=
 github.com/shengyanli1982/law v0.1.18 h1:Owtto1SazmyY3XIuEhMWlgG+rNcmMdnaGSkSPIdc1Pw=
 github.com/shengyanli1982/law v0.1.18/go.mod h1:20k9YnOTwilUB4X5Z4S7TIX5Ek1Ok4xfx8V8ZxIWlyM=
-github.com/shengyanli1982/orbit v0.1.13 h1:5D22wvbPmIpoQlAy2XRIbxC0lu60j/rPv0bkO0iC3us=
-github.com/shengyanli1982/orbit v0.1.13/go.mod h1:tieZUyWInU+vusvlUKjq8vRBIdGEPaGJAUdNYh1pdCs=
+github.com/shengyanli1982/orbit v0.1.14 h1:m5Z8o+nYN2e5fxQJl/jL+VFL8Bf6Vb4vpjvcaCfGUR4=
+github.com/shengyanli1982/orbit v0.1.14/go.mod h1:tieZUyWInU+vusvlUKjq8vRBIdGEPaGJAUdNYh1pdCs=
 github.com/shengyanli1982/toolkit/pkg/httptool v0.0.0-20240829143620-c99268455b35 h1:2FKGiROeDZVMHj2My05kBIdzH84Sb1VpOzdkYAql0Ew=
 github.com/shengyanli1982/toolkit/pkg/httptool v0.0.0-20240829143620-c99268455b35/go.mod h1:+YUDiw2G+DcmimgJPhvlwKrsKfZy+IeyeFczbxReUY0=
 github.com/sony/gobreaker v1.0.0 h1:feX5fGGXSl3dYd4aHZItw+FpHLvvoaqkawKjVNiFMNQ=

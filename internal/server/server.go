@@ -42,8 +42,7 @@ func (s *Server) Start() {
 	s.logger.Info("Starting all servers")
 
 	// 启动所有转发服务器
-	for name, forwardServer := range s.forwardServers {
-		s.logger.Info("Starting forward server", "name", name)
+	for _, forwardServer := range s.forwardServers {
 		forwardServer.Start()
 	}
 
@@ -57,8 +56,7 @@ func (s *Server) Stop() {
 	s.logger.Info("Stopping all servers")
 
 	// 停止所有转发服务器
-	for name, forwardServer := range s.forwardServers {
-		s.logger.Info("Stopping forward server", "name", name)
+	for _, forwardServer := range s.forwardServers {
 		forwardServer.Stop()
 	}
 

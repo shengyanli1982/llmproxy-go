@@ -37,3 +37,4 @@ build/
 vendor/
 .augment/
 design/
+bin/

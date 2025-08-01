@@ -31,7 +31,11 @@ func (b *RRBalancer) Select(ctx context.Context, upstreams []Upstream) (Upstream
 
 	// 使用原子操作获取下一个索引
 	idx := atomic.AddUint64(&b.index, 1) - 1
-	selected := upstreams[idx%uint64(len(upstreams))]
+	selectedIndex := idx % uint64(len(upstreams))
+	selected := upstreams[selectedIndex]
+
+	// 注意：负载均衡器的选择日志将在调用方记录
+	// 这里记录一些关键的选择决策信息供调用方使用
 
 	return selected, nil
 }

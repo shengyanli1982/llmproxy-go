@@ -49,7 +49,7 @@ func (s *AdminService) Initialize(config *config.AdminConfig, globalConfig *conf
 
 // RegisterGroup 注册路由组和处理器
 // 注意: prometheus metrics 通过 /metrics 端点由 orbit 框架自动提供
-// 注意: health check 通过 /health 端点由 orbit 框架自动提供
+// 注意: health check 通过 /ping 端点由 orbit 框架自动提供
 func (s *AdminService) RegisterGroup(g *gin.RouterGroup) {
 	// 统一指标端点（替代 orbit 框架的默认 /metrics）
 	g.GET("/metrics", s.handleMetrics)

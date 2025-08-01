@@ -90,12 +90,19 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 	s.globalConfig = globalConfig
 	s.logger = logger
 
+	s.logger.Info("Initializing forward service",
+		"service_name", cfg.Name,
+		"address", cfg.Address,
+		"port", cfg.Port)
+
 	// 初始化限流中间件
 	if cfg.RateLimit != nil {
 		s.rateLimitMW = ratelimit.NewRateLimitMiddleware(
 			float64(cfg.RateLimit.PerSecond), cfg.RateLimit.Burst,
 			float64(cfg.RateLimit.PerSecond), cfg.RateLimit.Burst,
 		)
+	} else {
+		s.logger.Info("Rate limiting disabled")
 	}
 
 	// 查找默认上游组
@@ -108,33 +115,48 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 	}
 
 	if defaultGroup == nil {
+		s.logger.Error(nil, "Default upstream group not found", "group_name", cfg.DefaultGroup)
 		return fmt.Errorf("default upstream group '%s' not found", cfg.DefaultGroup)
 	}
 
+	s.logger.Info("Found default upstream group",
+		"group_name", defaultGroup.Name,
+		"upstream_count", len(defaultGroup.Upstreams))
+
 	// 构建上游服务列表
 	if err := s.buildUpstreams(defaultGroup, globalConfig); err != nil {
+		s.logger.Error(err, "Failed to build upstreams")
 		return fmt.Errorf("failed to build upstreams: %w", err)
 	}
 
 	// 创建负载均衡器
 	if err := s.createLoadBalancer(defaultGroup); err != nil {
+		s.logger.Error(err, "Failed to create load balancer")
 		return fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
 	// 创建HTTP客户端
 	if err := s.createHttpClient(defaultGroup); err != nil {
+		s.logger.Error(err, "Failed to create HTTP client")
 		return fmt.Errorf("failed to create http client: %w", err)
 	}
 
 	// 初始化负载均衡器熔断器
 	if err := s.initializeCircuitBreakers(); err != nil {
+		s.logger.Error(err, "Failed to initialize circuit breakers")
 		return fmt.Errorf("failed to initialize circuit breakers: %w", err)
 	}
 
 	// 初始化指标收集器
 	if err := s.initializeMetricsCollector(); err != nil {
+		s.logger.Error(err, "Failed to initialize metrics collector")
 		return fmt.Errorf("failed to initialize metrics collector: %w", err)
 	}
+
+	s.logger.Info("Forward service initialized successfully",
+		"upstream_count", len(s.upstreams),
+		"load_balancer_type", s.loadBalancer.Type(),
+		"rate_limit_enabled", s.rateLimitMW != nil)
 
 	return nil
 }
@@ -241,7 +263,13 @@ func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) err
 
 	httpClient, err := factory.Create(clientConfig)
 	if err != nil {
+		s.logger.Error(err, "Failed to create HTTP client")
 		return err
+	}
+
+	// 为HTTP客户端设置日志器
+	if clientWithLogger, ok := httpClient.(interface{ SetLogger(logr.Logger) }); ok {
+		clientWithLogger.SetLogger(*s.logger)
 	}
 
 	s.httpClient = httpClient
@@ -289,7 +317,7 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 		// 执行IP级别的限流检查
 		if !s.rateLimitMW.AllowRequest(c.Request) {
 			clientIP := s.getClientIP(c.Request)
-			s.logger.V(1).Info("Rate limit exceeded for IP", "ip", clientIP)
+			s.logger.Info("Rate limit exceeded for IP", "ip", clientIP, "method", c.Request.Method, "path", c.Request.URL.Path)
 			detail := map[string]interface{}{
 				"code": "RATE_LIMIT_EXCEEDED",
 				"ip":   clientIP,
@@ -312,6 +340,19 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 // handleForward 处理转发请求
 func (s *ForwardService) handleForward(c *gin.Context) {
 	startTime := time.Now()
+	requestID := c.GetHeader("X-Request-ID")
+	if requestID == "" {
+		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
+
+	// 记录请求接收
+	s.logger.Info("Request received",
+		"request_id", requestID,
+		"method", c.Request.Method,
+		"path", c.Request.URL.Path,
+		"client_ip", c.ClientIP(),
+		"user_agent", c.GetHeader("User-Agent"),
+		"content_length", c.Request.ContentLength)
 
 	// 记录请求开始
 	if s.metricsCollector != nil {
@@ -319,11 +360,13 @@ func (s *ForwardService) handleForward(c *gin.Context) {
 	}
 
 	// 处理请求，如果有错误，直接返回错误响应
-	if err := s.processRequest(c, startTime); err != nil {
+	if err := s.processRequest(c, startTime, requestID); err != nil {
 		s.logger.Error(err, "Request processing failed",
+			"request_id", requestID,
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
-			"client_ip", c.ClientIP())
+			"client_ip", c.ClientIP(),
+			"duration_ms", time.Since(startTime).Milliseconds())
 
 		// 记录错误
 		if s.metricsCollector != nil {
@@ -331,18 +374,27 @@ func (s *ForwardService) handleForward(c *gin.Context) {
 		}
 
 		s.sendErrorResponse(c, http.StatusInternalServerError, "Internal server error")
+		return
 	}
+
+	// 记录请求完成
+	s.logger.Info("Request completed successfully",
+		"request_id", requestID,
+		"method", c.Request.Method,
+		"path", c.Request.URL.Path,
+		"duration_ms", time.Since(startTime).Milliseconds())
 }
 
 // processRequest 处理请求的核心逻辑
-func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) error {
+func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time, requestID string) error {
 	req := c.Request
 	ctx := req.Context()
 
 	// 1. 选择上游服务
+	s.logger.Info("Selecting upstream server", "request_id", requestID)
 	upstream, err := s.loadBalancer.Select(ctx, s.upstreams)
 	if err != nil {
-		s.logger.Error(err, "Failed to select upstream")
+		s.logger.Error(err, "Failed to select upstream", "request_id", requestID)
 
 		// 记录上游错误
 		if s.metricsCollector != nil {
@@ -353,9 +405,17 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 		return fmt.Errorf("failed to select upstream: %w", err)
 	}
 
+	s.logger.Info("Upstream server selected",
+		"request_id", requestID,
+		"upstream_name", upstream.Name,
+		"upstream_url", upstream.URL,
+		"load_balancer_type", s.loadBalancer.Type())
+
 	// 2. 检查上游级别的限流
 	if !upstream.CheckRateLimit() {
-		s.logger.V(1).Info("Rate limit exceeded for upstream", "upstream", upstream.Name)
+		s.logger.Info("Rate limit exceeded for upstream",
+			"request_id", requestID,
+			"upstream", upstream.Name)
 
 		// 记录限流拒绝
 		if s.metricsCollector != nil {
@@ -367,19 +427,31 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 	}
 
 	// 3. 创建请求副本
+	s.logger.Info("Creating proxy request", "request_id", requestID, "upstream", upstream.Name)
 	proxyReq, err := s.createProxyRequest(req)
 	if err != nil {
-		s.logger.Error(err, "Failed to create proxy request")
+		s.logger.Error(err, "Failed to create proxy request", "request_id", requestID)
 		s.sendErrorResponse(c, http.StatusInternalServerError, "Failed to create proxy request")
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
 	// 4. 执行请求（通过Upstream封装的熔断器保护）
+	s.logger.Info("Executing upstream request",
+		"request_id", requestID,
+		"upstream", upstream.Name,
+		"target_url", proxyReq.URL.String())
+
+	requestStartTime := time.Now()
 	resp, err := upstream.ExecuteWithBreaker(func() (*http.Response, error) {
 		return s.httpClient.Do(proxyReq, &upstream)
 	})
+	requestDuration := time.Since(requestStartTime)
+
 	if err != nil {
-		s.logger.Error(err, "Request execution failed", "upstream", upstream.Name)
+		s.logger.Error(err, "Request execution failed",
+			"request_id", requestID,
+			"upstream", upstream.Name,
+			"request_duration_ms", requestDuration.Milliseconds())
 
 		// 记录上游错误
 		if s.metricsCollector != nil {
@@ -389,6 +461,12 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 		s.sendErrorResponse(c, http.StatusServiceUnavailable, "Upstream service unavailable")
 		return fmt.Errorf("request execution failed for upstream %s: %w", upstream.Name, err)
 	}
+
+	s.logger.Info("Upstream request completed",
+		"request_id", requestID,
+		"upstream", upstream.Name,
+		"status_code", resp.StatusCode,
+		"request_duration_ms", requestDuration.Milliseconds())
 
 	defer resp.Body.Close()
 

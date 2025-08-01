@@ -103,8 +103,6 @@ func (s *AdminServer) Start() {
 
 	// 重置关闭标志
 	s.closeOnce = sync.Once{}
-
-	s.logger.Info("Admin server started successfully", "endpoint", s.endpoint)
 }
 
 // Stop 停止管理服务器
@@ -122,8 +120,6 @@ func (s *AdminServer) Stop() {
 
 		// 停止管理服务
 		s.service.Stop()
-
-		s.logger.Info("Admin server stopped successfully", "endpoint", s.endpoint)
 	})
 }
 

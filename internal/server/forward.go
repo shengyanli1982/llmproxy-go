@@ -90,8 +90,6 @@ func (s *ForwardServer) Start() {
 
 	// 重置关闭标志
 	s.closeOnce = sync.Once{}
-
-	s.logger.Info("Forward server started successfully", "name", s.name)
 }
 
 // Stop 停止转发服务器
@@ -109,8 +107,6 @@ func (s *ForwardServer) Stop() {
 
 		// 停止转发服务
 		s.service.Stop()
-
-		s.logger.Info("Forward server stopped successfully", "name", s.name)
 	})
 }
 

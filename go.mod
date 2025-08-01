@@ -13,7 +13,7 @@ require (
 	github.com/prometheus/client_golang v1.19.1
 	github.com/shengyanli1982/gs v0.1.5
 	github.com/shengyanli1982/law v0.1.18
-	github.com/shengyanli1982/orbit v0.1.13
+	github.com/shengyanli1982/orbit v0.1.14
 	github.com/shengyanli1982/toolkit/pkg/httptool v0.0.0-20240829143620-c99268455b35
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/cobra v1.9.1

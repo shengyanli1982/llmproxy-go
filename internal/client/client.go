@@ -85,12 +85,15 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 // Do 执行HTTP请求到指定上游服务
 func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Response, error) {
 	if c.closed {
+		c.logger.Error(ErrClientClosed, "Client is closed, cannot execute request")
 		return nil, ErrClientClosed
 	}
 	if req == nil {
+		c.logger.Error(ErrNilRequest, "Request cannot be nil")
 		return nil, ErrNilRequest
 	}
 	if upstream == nil {
+		c.logger.Error(ErrNilUpstream, "Upstream cannot be nil")
 		return nil, ErrNilUpstream
 	}
 
@@ -98,15 +101,43 @@ func (c *httpClient) Do(req *http.Request, upstream *balance.Upstream) (*http.Re
 	c.logger.Info("Preparing HTTP request",
 		"method", req.Method,
 		"path", req.URL.Path,
-		"upstream", upstream.Name)
+		"upstream", upstream.Name,
+		"client_name", c.name)
 
+	startTime := time.Now()
 	if err := c.prepareRequest(req, upstream); err != nil {
-		c.logger.Error(err, "Failed to prepare request", "upstream", upstream.Name)
+		c.logger.Error(err, "Failed to prepare request",
+			"upstream", upstream.Name,
+			"duration_ms", time.Since(startTime).Milliseconds())
 		return nil, fmt.Errorf("failed to prepare request: %w", err)
 	}
 
+	c.logger.Info("HTTP request prepared and executing",
+		"method", req.Method,
+		"target_url", req.URL.String(),
+		"upstream", upstream.Name,
+		"preparation_duration_ms", time.Since(startTime).Milliseconds())
+
 	// 执行请求
-	return c.client.Do(req)
+	execStartTime := time.Now()
+	resp, err := c.client.Do(req)
+	execDuration := time.Since(execStartTime)
+
+	if err != nil {
+		c.logger.Error(err, "HTTP request execution failed",
+			"upstream", upstream.Name,
+			"target_url", req.URL.String(),
+			"execution_duration_ms", execDuration.Milliseconds())
+		return nil, err
+	}
+
+	c.logger.Info("HTTP request executed successfully",
+		"upstream", upstream.Name,
+		"status_code", resp.StatusCode,
+		"content_length", resp.ContentLength,
+		"execution_duration_ms", execDuration.Milliseconds())
+
+	return resp, nil
 }
 
 // prepareRequest 准备HTTP请求，设置目标URL和认证信息
@@ -120,8 +151,11 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 		return ErrNilUpstream
 	}
 	if upstream.URL == "" {
+		c.logger.Error(nil, "Upstream URL cannot be empty", "upstream_name", upstream.Name)
 		return fmt.Errorf("upstream URL cannot be empty for upstream '%s'", upstream.Name)
 	}
+
+	originalURL := req.URL.String()
 
 	// 解析upstream URL，处理不带scheme的情况
 	var upstreamURL *url.URL
@@ -133,24 +167,33 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 		// 如果解析失败，可能是因为缺少scheme，尝试添加http://前缀
 		upstreamURL, err = url.Parse("http://" + upstream.URL)
 		if err != nil {
+			c.logger.Error(err, "Invalid upstream URL", "upstream", upstream.Name, "url", upstream.URL)
 			return fmt.Errorf("invalid upstream URL '%s': %w", upstream.URL, err)
 		}
 	} else if upstreamURL.Scheme == "" {
 		// 如果解析成功但没有scheme，添加http://前缀重新解析
 		upstreamURL, err = url.Parse("http://" + upstream.URL)
 		if err != nil {
+			c.logger.Error(err, "Invalid upstream URL after adding scheme", "upstream", upstream.Name, "url", upstream.URL)
 			return fmt.Errorf("invalid upstream URL '%s': %w", upstream.URL, err)
 		}
 	}
 
 	// 验证URL必须包含host
 	if upstreamURL.Host == "" {
+		c.logger.Error(nil, "Upstream URL must include host", "upstream", upstream.Name, "url", upstream.URL)
 		return fmt.Errorf("upstream URL must include host: %s", upstream.URL)
 	}
 
 	// 设置目标URL的scheme和host
 	req.URL.Scheme = upstreamURL.Scheme
 	req.URL.Host = upstreamURL.Host
+
+	c.logger.Info("URL rewriting completed",
+		"upstream", upstream.Name,
+		"original_url", originalURL,
+		"target_scheme", req.URL.Scheme,
+		"target_host", req.URL.Host)
 
 	// 实现URL拆分和拼接转发机制
 	// 用户设计思路：用户请求URL拆分成基础URL和路径，然后与upstream URL拼接
@@ -169,24 +212,35 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 		if upstreamURL.Fragment != "" {
 			req.URL.Fragment = upstreamURL.Fragment
 		}
+		c.logger.Info("Using upstream specific path", "upstream", upstream.Name, "path", req.URL.Path)
 	}
 	// 注意：当upstream URL是基础URL时，我们不需要修改req.URL.Path、RawQuery、Fragment
 	// 它们保持用户请求的原始值，实现了"基础URL + 用户路径"的拼接机制
 
 	// 应用认证（使用缓存的认证器）
+	c.logger.Info("Applying authentication", "upstream", upstream.Name, "auth_type", upstream.Authenticator.Type())
 	if err := upstream.ApplyAuth(req); err != nil {
+		c.logger.Error(err, "Failed to apply authentication", "upstream", upstream.Name)
 		return fmt.Errorf("failed to apply authentication: %w", err)
 	}
 
 	// 应用头部操作（如果配置中有）
 	if upstream.Config != nil && len(upstream.Config.Headers) > 0 {
+		c.logger.Info("Processing custom headers", "upstream", upstream.Name, "header_count", len(upstream.Config.Headers))
 		if err := c.headerOperator.Process(req.Header, upstream.Config.Headers); err != nil {
+			c.logger.Error(err, "Failed to process headers", "upstream", upstream.Name)
 			return fmt.Errorf("failed to process headers: %w", err)
 		}
 	}
 
 	// 设置默认头部
 	c.setDefaultHeaders(req)
+
+	c.logger.Info("Request preparation completed",
+		"upstream", upstream.Name,
+		"final_url", req.URL.String(),
+		"user_agent", req.Header.Get("User-Agent"),
+		"connection", req.Header.Get("Connection"))
 
 	return nil
 }
