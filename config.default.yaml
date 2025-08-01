@@ -1,0 +1,312 @@
+# LLMProxy 配置模板
+# 请根据您的实际需求修改此文件。
+# 更多信息和高级配置，请参阅官方文档。
+
+#-------------------------------------------------------------------------------
+# 重要变更说明：
+# - 重试功能已整合到熔断器中，不再需要单独的 retry 配置段
+# - 原 retry.attempts 参数对应 breaker.maxRequests
+# - 原 retry.initial 参数对应 breaker.cooldown
+# - 熔断器的半开状态提供了更智能的重试机制
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# 请确保在修改后保存文件。
+# 对于生产环境，强烈建议将包含敏感信息 (如 API 密钥) 的配置文件妥善保管，
+# 并考虑使用环境变量或密钥管理服务来处理这些敏感值。
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# HTTP 服务器配置 (httpServer)
+#-------------------------------------------------------------------------------
+# 定义 LLMProxy 如何监听和处理传入的 HTTP 请求。
+httpServer:
+  #-----------------------------------------------------------------------------
+  # 转发服务 (forwards)
+  #-----------------------------------------------------------------------------
+  # 定义一组或多组转发规则，每个规则监听特定端口并将请求路由到指定的上游组。
+  forwards:
+    # 示例 1: 转发到混合上游组 (mixgroup)
+    - name: to_mixgroup # [必填] 转发服务名称。必须在配置文件中唯一，用于日志和管理识别。
+      port: 3000 # [必填] 此转发服务监听的端口号。默认值: 3000
+      address: "0.0.0.0" # [可选] 服务监听的网络地址。默认值: "0.0.0.0" (监听所有网络接口)。考虑安全性，可设置为 "127.0.0.1" (仅本地访问)。
+      defaultGroup: "mixgroup" # [必填] 此转发服务关联的上游组名称（默认，所有路由未匹配时）。该名称必须在 `upstreamGroups` 部分定义。
+      # [可选] IP 速率限制配置。如果省略，则不启用此转发的速率限制。
+      ratelimit:
+        perSecond: 100 # [可选] 每秒允许来自单个 IP 的最大请求数。默认值: 100
+        burst: 200 # [可选] 允许来自单个 IP 的突发请求数。默认值: 200。
+      # [可选] 连接超时配置。如果省略，将使用默认值。
+      timeout:
+        idle: 60000 # [可选] 空闲连接超时时间 (毫秒)。默认值: 60000
+        read: 30000 # [可选] 读取超时时间 (毫秒)。默认值: 30000
+        write: 30000 # [可选] 写入超时时间 (毫秒)。默认值: 30000
+
+    # 示例 2: 转发到 OpenAI 上游组 (openai_group)
+    - name: openai_group # [必填] 转发服务名称。
+      port: 3001 # [必填] 监听端口。
+      address: "0.0.0.0" # [可选] 监听地址。默认值: "0.0.0.0"
+      defaultGroup: "openai" # [必填] 关联的上游组名称。该名称必须在 `upstreamGroups` 部分定义。
+      # [可选] 速率限制配置。如果省略，则不启用速率限制。
+      ratelimit:
+        perSecond: 100 # [可选] 每秒允许的最大请求数。默认值: 100
+        burst: 200 # [可选] 允许的突发请求数。默认值: 200
+      # [可选] 连接超时配置。如果省略，将使用默认值。
+      timeout:
+        idle: 60000 # [可选] 空闲连接超时时间 (毫秒)。默认值: 60000
+        read: 30000 # [可选] 读取超时时间 (毫秒)。默认值: 30000
+        write: 30000 # [可选] 写入超时时间 (毫秒)。默认值: 30000
+
+  #-----------------------------------------------------------------------------
+  # 管理服务 (admin)
+  #-----------------------------------------------------------------------------
+  # [可选] 配置管理接口，用于提供监控指标 (如 /metrics) 和健康检查 (如 /ping)。
+  # 注意: 管理接口通常不设置速率限制。
+  admin:
+    port: 9000 # [可选] 管理服务监听的端口号。默认值: 9000
+    address: "0.0.0.0" # [可选] 管理服务监听的网络地址。默认值: "0.0.0.0"。出于安全考虑，建议在生产环境中设置为 "127.0.0.1"，仅允许本地访问。
+    # [可选] 管理接口连接超时配置。如果省略，将使用默认值。
+    timeout:
+      idle: 60000 # [可选] 空闲连接超时时间 (毫秒)。默认值: 60000
+      read: 30000 # [可选] 读取超时时间 (毫秒)。默认值: 30000
+      write: 30000 # [可选] 写入超时时间 (毫秒)。默认值: 30000
+
+#-------------------------------------------------------------------------------
+# 上游服务定义 (upstreams)
+#-------------------------------------------------------------------------------
+# 定义后端 LLM API 服务。每个上游代表一个实际的 API 端点。
+upstreams:
+  # 示例 1: OpenAI API
+  - name: openai_primary # [必填] 上游服务名称。必须在配置文件中唯一。
+    url:
+      "https://api.openai.com/v1/chat/completions" # [必填] 上游服务的完整基础 URL。
+      # 注意: 应配置为基础URL，完整端点 "https://api.openai.com/v1/chat/completions"。
+    # [可选] 认证配置。如果省略，默认不使用认证 (auth.type="none")。
+    auth:
+      type: "bearer" # [可选] 认证类型。可选值:
+      #   "bearer": 使用 Bearer Token 认证 (例如 OpenAI, Anthropic)。
+      #   "basic": 使用 Basic Auth (用户名/密码)。
+      #   "none": 无认证。默认值: "none"
+      token: "YOUR_OPENAI_API_KEY_HERE" # [条件必填] 当 type 为 "bearer" 时，必须提供 API Key。
+      # username: "YOUR_USERNAME" # [条件必填] 当 type 为 "basic" 时，必须提供用户名。
+      # password: "YOUR_PASSWORD" # [条件必填] 当 type 为 "basic" 时，必须提供密码。
+    # [可选] HTTP 头部操作。用于在请求转发到此上游前修改请求头。如果省略，不进行任何头部修改。
+    headers:
+      - op: "insert" # [必填] 操作类型:
+        #   "insert": 如果头部不存在则插入；若存在则不执行任何操作。
+        #   "replace": 如果头部存在则替换其值；若不存在则插入。
+        #   "remove": 如果头部存在则删除。
+        key: X-Custom-Header-For-OpenAI # [必填] 要操作的 HTTP 头部名称。
+        value: "MyProxyValue" # [条件必填] 对于 "insert" 或 "replace" 操作，必须提供头部的值。对于 "remove" 操作，此字段可省略。
+    # [可选] 熔断器配置。如果省略，则不启用熔断器功能。
+    # 注意：熔断器已整合了重试功能，无需单独配置重试。
+    breaker:
+      threshold: 0.5 # [可选] 熔断器触发所需的失败率。默认值: 0.5。取值范围: 0.01-1.0。例如，0.5 表示 50% 的请求失败时触发熔断。
+      cooldown: 30000 # [可选] 熔断器冷却时间 (毫秒)，即熔断后多久尝试进入半开状态。默认值: 30000。取值范围: 1000-3600000
+      maxRequests: 3 # [可选] 半开状态下允许通过的最大请求数。默认值: 3。取值范围: 1-100。类似于重试次数的概念。
+      interval: 10000 # [可选] 闭合状态下统计周期重置间隔 (毫秒)。默认值: 10000。取值范围: 1000-3600000。用于定期清除失败统计。
+    # [可选] 限速器配置。如果省略，则不启用限速器功能。
+    ratelimit:
+      perSecond: 100 # [可选] 每秒允许的最大请求数。默认值: 100
+
+  # 示例 2: Anthropic API
+  - name: anthropic_primary # [必填] 上游服务名称。
+    url: "https://api.anthropic.com/v1/chat/completions" # [必填] 上游服务 URL。
+    # [可选] 认证配置。
+    auth:
+      type: "bearer" # [可选] 认证类型。默认值: "none"
+      token:
+        "YOUR_ANTHROPIC_API_KEY_HERE" # [条件必填] 当 type 为 "bearer" 时必填。
+        # 请替换为您的真实 Anthropic API 密钥。
+    # [可选] HTTP 头部操作。用于在请求转发到此上游前修改请求头。
+    headers:
+      - op: "insert" # [必填] 操作类型。
+        key: "x-api-key" # [必填] 要操作的 HTTP 头部名称。
+        # 注意：某些 API (如 Anthropic Claude) 可能要求通过头部传递 API Key 而不是 Bearer Token。
+        # 请参考具体 API 文档。此处的 'token' 字段仍可用于 'Bearer' 认证类型，
+        # 而头部操作可以用于其他形式的基于头部的密钥传递。
+        value: "YOUR_ANTHROPIC_API_KEY_IN_HEADER_IF_NEEDED" # [条件必填] 当 op 为 "insert" 或 "replace" 时必填。如果 API Key 通过头部传递，请在此处配置。
+    # [可选] 限速器配置。如果省略，则不启用限速器功能。
+    ratelimit:
+      perSecond: 100 # [可选] 每秒允许的最大请求数。默认值: 100
+
+  # 示例 3: 使用 Basic 认证的自定义上游
+  - name: custom_service_basic_auth # [必填] 上游服务名称。
+    url: "https://api.example.com/v1/chat/completions" # [必填] 上游服务 URL。
+    # [可选] 认证配置。
+    auth:
+      type: "basic" # [可选] 认证类型。默认值: "none"
+      username: "service_user" # [条件必填] 当 type 为 "basic" 时必填。
+      password: "service_password_placeholder" # [条件必填] 当 type 为 "basic" 时必填。
+    # [可选] 熔断器配置
+    breaker:
+      threshold: 0.5 # [可选] 熔断器触发所需的失败率。默认值: 0.5。取值范围: 0.01-1.0
+      cooldown: 30000 # [可选] 熔断器冷却时间 (毫秒)。默认值: 30000。取值范围: 1000-3600000
+  # 注意:
+  # - 如果省略 `auth` 字段，则默认不对此上游使用任何认证 (等同于 auth.type="none")。
+  # - 如果省略 `headers` 字段，则默认不对发送到此上游的请求头进行任何修改。
+  # - 如果省略 `breaker` 字段，则默认不对此上游启用熔断器。
+  # - 如果省略 `ratelimit` 字段，则默认不对此上游启用限速器。
+
+#-------------------------------------------------------------------------------
+# 上游组定义 (upstreamGroups)
+#-------------------------------------------------------------------------------
+# 将多个上游服务组合在一起，并定义负载均衡、HTTP 客户端行为等。
+upstreamGroups:
+  # 示例 1: 混合上游组 (用于演示多种特性)
+  - name: mixgroup # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表 (至少需要一个)。
+    # 每个条目引用在 `upstreams` 部分定义的上游服务的 `name`。
+    upstreams:
+      - name: openai_primary # [必填] 引用在 upstreams 部分定义的上游服务名称。
+      # - name: anthropic_primary # 可以添加多个上游到同一组
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。可选值:
+      #   "roundrobin": 轮询。按顺序将请求分发给每个上游。
+      #   "weighted_roundrobin": 加权轮询。根据为每个上游定义的权重分配请求。
+      #   "random": 随机。随机选择一个上游。
+      #   "iphash": ip哈希。根据客户端请求 IP 选择一个上游。
+    # [可选] HTTP 客户端配置。定义 LLMProxy 如何与此组中的上游服务通信。
+    # 如果省略，将使用全局默认的 HTTP 客户端配置。
+    httpClient:
+      agent: "LLMProxy/1.0 (YourIdentifier)" # [可选] 发送到上游的 User-Agent 头部值。默认值: "LLMProxy/1.0"
+      keepalive: 60000 # [可选] TCP Keepalive 时间 (毫秒)。默认值: 60000。取值范围: 0-600000。0 表示禁用。# 有助于保持与上游的连接活跃，减少延迟。
+      # [可选] 连接池配置。如果省略，将使用默认值。
+      connect:
+        idleTotal: 100 # [可选] 最大空闲连接数。默认值: 100。取值范围: 0-1000。0 表示使用默认值
+        idlePerHost: 10 # [可选] 每个主机最大空闲连接数。默认值: 10。取值范围: 0-100。0 表示使用默认值
+        maxPerHost: 50 # [可选] 每个主机最大连接数。默认值: 50。取值范围: 0-500。0 表示使用默认值
+      # [可选] 连接和请求超时配置。如果省略，将使用默认值。
+      timeout:
+        connect: 10000 # [可选] 连接到上游服务的超时时间 (毫秒)。默认值: 10000 毫秒
+        request: 300000 # [可选] 从发送请求到接收到上游完整响应 (非流式) 的超时时间 (毫秒)。默认值: 300000 毫秒
+        idle: 60000 # [可选] 与上游服务的连接在无活动后被视为空闲并关闭的超时时间 (毫秒)。默认值: 60000 毫秒
+      # [可选] HTTP/HTTPS 代理配置。如果省略，则不使用代理。
+      proxy:
+        url:
+          "http://user:pass@your-proxy-server.com:8080" # [必填] 代理服务器 URL。
+          # 示例: "http://proxy.example.com:8080"
+          #       "socks5://user:password@host:port" (如果支持 SOCKS5)
+
+  # 示例 2: OpenAI 专用上游组 (使用加权轮询)
+  - name: openai # [必填] 上游组名称。
+    upstreams:
+      - name: openai_primary # [必填] 引用上游服务名称。
+        weight: 8 # [条件可选] 权重。仅在 `balance.strategy` 为 "weighted_roundrobin" 时有效。默认值: 1。权重越高的上游将接收到更多请求。
+      - name: custom_service_basic_auth # 可以将不同类型的上游放入一个组
+        weight: 2 # [条件可选] 权重。
+    balance:
+      strategy: "weighted_roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"
+    httpClient: # [可选] 可以为每个组定制 HTTP 客户端行为
+      agent: "LLMProxy/1.0 (OpenAIClient)" # [可选] User-Agent。默认值: "LLMProxy/1.0"
+      keepalive: 90000 # [可选] 例如，为 OpenAI 连接设置更长的 keepalive。默认值: 60000 毫秒。取值范围: 0-600000
+      # [可选] 连接和请求超时配置。如果省略，将使用默认值。
+      timeout:
+        connect: 10000 # [可选] 连接超时。默认值: 10000 毫秒
+        request: 300000 # [可选] 请求超时。默认值: 300000 毫秒。对于 OpenAI 请求，通常响应时间较长。
+        idle: 90000 # [可选] 空闲连接超时。默认值: 60000 毫秒
+      # [可选] HTTP/HTTPS 代理配置。如果省略，则不使用代理。
+      proxy:
+        url: "http://proxy.example.com:8080" # [必填] 代理服务器 URL。
+
+  # 示例 3: Anthropic 专用上游组 (使用随机负载均衡)
+  - name: anthropic # [必填] 上游组名称。
+    upstreams:
+      - name: anthropic_primary # [必填] 引用上游服务名称。可以添加更多 Anthropic 上游实例，例如不同区域的端点
+    balance:
+      strategy: "random" # [可选] 负载均衡策略。默认值: "roundrobin"。对于期望更均匀随机分布的场景，可选择 "random"。
+    httpClient:
+      agent: "LLMProxy/1.0 (AnthropicClient)" # [可选] User-Agent。默认值: "LLMProxy/1.0"
+      keepalive: 60000 # [可选] TCP Keepalive 时间。默认值: 60000。取值范围: 0-600000
+      # [可选] 连接和请求超时配置。如果省略，将使用默认值。
+      timeout:
+        connect: 15000 # [可选] Anthropic 连接可能需要稍长超时。默认值: 10000 毫秒
+        request: 300000 # [可选] 请求超时。默认值: 300000 毫秒。Anthropic Claude 的响应也可能较长。
+        idle: 60000 # [可选] 空闲连接超时。默认值: 60000 毫秒
+      # [可选] HTTP/HTTPS 代理配置。如果省略，则不使用代理。
+      proxy:
+        url: "http://proxy.example.com:8080" # [必填] 代理服务器 URL。
+
+  # --- 为高级路由示例定义的上游组 ---
+  # 以下是为 'to_routing_examples' 转发服务中的高级路由规则定义的专用上游组。
+  # 每个组都配置了简单的轮询负载均衡，并将请求路由到相应的后端服务。
+
+  # 示例: 默认目标组
+  # 当 'to_routing_examples' 中的请求未匹配任何特定路由规则时，将使用此默认组。
+  - name: default_routing_target # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: 静态路径目标组
+  # 用于处理到 "/api/users/admin" 的请求，演示静态路径的最高优先级匹配。
+  - name: static_path_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: openai_primary # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: 用户 API 目标组 (命名参数)
+  # 用于处理到 "/api/users/:id" 的请求，演示了使用命名参数进行路由。
+  - name: user_api_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: 物品 API 目标组 (带正则的命名参数)
+  # 用于处理到 "/api/items/{id:[0-9]+}" 的请求，演示了参数的正则约束。
+  - name: item_api_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: 产品 API 目标组 (复杂正则)
+  # 用于处理到 "/api/products/{code:[A-Z][A-Z][A-Z][0-9][0-9][0-9]}" 的请求。
+  - name: product_api_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: API 文档目标组 (中间通配符)
+  # 用于处理到 "/api/*/docs" 的请求，演示了使用中间通配符 `*`。
+  - name: api_docs_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: 用户资料目标组 (混合模式)
+  # 用于处理到 "/api/:version/users/{id:[0-9]+}/profile" 的请求，演示混合路由模式。
+  - name: user_profile_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
+
+  # 示例: 文件服务器目标组 (尾部通配符)
+  # 用于处理到 "/files/*" 的请求，演示尾部通配符 `*` 匹配剩余所有路径段。
+  - name: file_server_group # [必填] 上游组名称。必须在配置文件中唯一。
+    # [必填] 此组包含的上游服务列表。
+    upstreams:
+      - name: custom_service_basic_auth # [必填] 引用在 'upstreams' 部分定义的上游服务名称。
+    # [可选] 负载均衡策略。
+    balance:
+      strategy: "roundrobin" # [可选] 负载均衡策略。默认值: "roundrobin"。
