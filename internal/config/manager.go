@@ -151,10 +151,13 @@ func (m *Manager) setForwardDefaults(config *Config) {
 		if forward.Address == "" {
 			forward.Address = "0.0.0.0"
 		}
-		if forward.RateLimit == nil {
-			forward.RateLimit = &RateLimitConfig{
-				PerSecond: 100,
-				Burst:     200,
+		// 只有用户显式配置了ratelimit时才设置子字段默认值
+		if forward.RateLimit != nil {
+			if forward.RateLimit.PerSecond == 0 {
+				forward.RateLimit.PerSecond = 100
+			}
+			if forward.RateLimit.Burst == 0 {
+				forward.RateLimit.Burst = 1
 			}
 		}
 		if forward.Timeout == nil {
