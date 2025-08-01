@@ -23,7 +23,7 @@ func (l *IPLimiter) Allow(req *http.Request) bool {
 	if ip == "" {
 		return true // 无法获取IP时默认通过
 	}
-	
+
 	return l.limiter.Allow(ip)
 }
 
@@ -41,20 +41,20 @@ func (l *IPLimiter) getClientIP(req *http.Request) string {
 			return ip
 		}
 	}
-	
+
 	// 检查X-Real-IP头部
 	if xri := req.Header.Get("X-Real-IP"); xri != "" {
 		if ip := net.ParseIP(xri); ip != nil {
 			return xri
 		}
 	}
-	
+
 	// 使用RemoteAddr
 	host, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
 		return req.RemoteAddr
 	}
-	
+
 	return host
 }
 
@@ -69,11 +69,11 @@ func parseFirstIP(xff string) string {
 			break
 		}
 	}
-	
+
 	// 如果没有逗号，检查整个字符串
 	if ip := net.ParseIP(xff); ip != nil {
 		return xff
 	}
-	
+
 	return ""
 }

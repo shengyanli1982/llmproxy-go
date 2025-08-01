@@ -9,6 +9,7 @@ import (
 
 	"github.com/buraksezer/consistent"
 	"github.com/cespare/xxhash/v2"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // IPHashBalancer 实现基于客户端 IP 的一致性哈希负载均衡算法
@@ -168,5 +169,5 @@ func (b *IPHashBalancer) UpdateLatency(upstreamName string, latency int64) {
 
 // Type 获取负载均衡器类型标识
 func (b *IPHashBalancer) Type() string {
-	return "iphash"
+	return constants.BalanceIPHash
 }

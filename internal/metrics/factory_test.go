@@ -201,4 +201,3 @@ func TestFactory_Create_PrometheusCollector(t *testing.T) {
 		t.Error("Expected nil collector for unsupported prometheus type")
 	}
 }
-

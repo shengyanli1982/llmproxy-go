@@ -109,19 +109,19 @@ func TestObjectPoolCorrectness(t *testing.T) {
 		// 创建一个对象并设置一些数据
 		w1 := httptest.NewRecorder()
 		c1, _ := gin.CreateTestContext(w1)
-		
+
 		Error(CodeBadRequest, "first error").WithDetail("detail1").JSON(c1, http.StatusBadRequest)
-		
+
 		// 创建另一个对象，应该是干净的
 		w2 := httptest.NewRecorder()
 		c2, _ := gin.CreateTestContext(w2)
-		
+
 		Success("clean data").JSON(c2, http.StatusOK)
-		
+
 		var response httptool.BaseHttpResponse
 		err := json.Unmarshal(w2.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		
+
 		// 验证第二个响应是干净的，没有第一个响应的数据残留
 		assert.Equal(t, int64(CodeSuccess), response.Code)
 		assert.Equal(t, "", response.ErrorMessage)
@@ -132,30 +132,30 @@ func TestObjectPoolCorrectness(t *testing.T) {
 	t.Run("Concurrent Object Pool Usage", func(t *testing.T) {
 		const numGoroutines = 100
 		const numIterations = 10
-		
+
 		var wg sync.WaitGroup
-		
+
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				
+
 				for j := 0; j < numIterations; j++ {
 					w := httptest.NewRecorder()
 					c, _ := gin.CreateTestContext(w)
-					
+
 					// 交替创建成功和错误响应
 					if (id+j)%2 == 0 {
 						Success(map[string]int{"id": id, "iteration": j}).JSON(c, http.StatusOK)
 					} else {
 						Error(CodeBadRequest, "test error").WithDetail(map[string]int{"id": id, "iteration": j}).JSON(c, http.StatusBadRequest)
 					}
-					
+
 					// 验证响应正确性
 					var response httptool.BaseHttpResponse
 					err := json.Unmarshal(w.Body.Bytes(), &response)
 					assert.NoError(t, err)
-					
+
 					if (id+j)%2 == 0 {
 						assert.Equal(t, int64(CodeSuccess), response.Code)
 						assert.NotNil(t, response.Data)
@@ -167,7 +167,7 @@ func TestObjectPoolCorrectness(t *testing.T) {
 				}
 			}(i)
 		}
-		
+
 		wg.Wait()
 	})
 }
@@ -175,17 +175,17 @@ func TestObjectPoolCorrectness(t *testing.T) {
 // BenchmarkResponseBuilder_WithoutPool 基准测试：不使用对象池的响应构建器
 func BenchmarkResponseBuilder_WithoutPool(b *testing.B) {
 	gin.SetMode(gin.TestMode)
-	
+
 	testData := map[string]interface{}{
 		"message": "benchmark test",
 		"id":      12345,
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		// 模拟不使用对象池的旧实现
 		builder := &ResponseBuilder{
 			response: &httptool.BaseHttpResponse{
@@ -200,17 +200,17 @@ func BenchmarkResponseBuilder_WithoutPool(b *testing.B) {
 // BenchmarkResponseBuilder_WithPool 基准测试：使用对象池的响应构建器
 func BenchmarkResponseBuilder_WithPool(b *testing.B) {
 	gin.SetMode(gin.TestMode)
-	
+
 	testData := map[string]interface{}{
 		"message": "benchmark test",
 		"id":      12345,
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		Success(testData).JSON(c, http.StatusOK)
 	}
 }
@@ -218,18 +218,18 @@ func BenchmarkResponseBuilder_WithPool(b *testing.B) {
 // BenchmarkResponseBuilder_Concurrent 基准测试：并发使用对象池
 func BenchmarkResponseBuilder_Concurrent(b *testing.B) {
 	gin.SetMode(gin.TestMode)
-	
+
 	testData := map[string]interface{}{
 		"message": "concurrent benchmark test",
 		"id":      12345,
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			
+
 			Success(testData).JSON(c, http.StatusOK)
 		}
 	})

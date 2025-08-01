@@ -8,8 +8,8 @@ import (
 
 // 工厂相关错误定义
 var (
-	ErrEmptyName     = errors.New("breaker name cannot be empty")
-	ErrNilSettings   = errors.New("breaker settings cannot be nil")
+	ErrEmptyName   = errors.New("breaker name cannot be empty")
+	ErrNilSettings = errors.New("breaker settings cannot be nil")
 )
 
 // breakerFactory 代表熔断器工厂实现
@@ -28,7 +28,7 @@ func (f *breakerFactory) Create(name string, settings gobreaker.Settings) (Circu
 
 	// 使用提供的settings创建gobreaker实例
 	gb := gobreaker.NewCircuitBreaker(settings)
-	
+
 	return &BreakerWrapper{
 		name: name,
 		cb:   gb,

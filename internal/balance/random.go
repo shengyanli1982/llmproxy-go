@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // RandomBalancer 实现随机负载均衡算法
@@ -34,9 +36,9 @@ func (b *RandomBalancer) Select(ctx context.Context, upstreams []Upstream) (Upst
 	// 简单的线性同余生成器，适合快速随机选择
 	seed := atomic.AddUint64(&b.seed, 1)
 	index := int(seed % uint64(len(upstreams)))
-	
+
 	selected := upstreams[index]
-	
+
 	// 注意：这里无法直接使用日志器，因为负载均衡器没有日志器接口
 	// 负载均衡器的选择日志将在调用方记录
 
@@ -59,5 +61,5 @@ func (b *RandomBalancer) UpdateLatency(upstreamName string, latency int64) {
 
 // Type 获取负载均衡器类型
 func (b *RandomBalancer) Type() string {
-	return "random"
+	return constants.BalanceRandom
 }

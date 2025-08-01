@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // WeightedRRBalancer 实现加权轮询负载均衡算法
@@ -100,5 +102,5 @@ func (b *WeightedRRBalancer) UpdateLatency(upstreamName string, latency int64) {
 
 // Type 获取负载均衡器类型
 func (b *WeightedRRBalancer) Type() string {
-	return "weighted_roundrobin"
+	return constants.BalanceWeightedRoundRobin
 }

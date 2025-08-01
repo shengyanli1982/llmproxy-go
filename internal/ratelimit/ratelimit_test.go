@@ -61,10 +61,10 @@ func TestTokenBucketLimiter_Type(t *testing.T) {
 
 func TestTokenBucketLimiter_ConcurrentAccess(t *testing.T) {
 	limiter := NewTokenBucketLimiter(100.0, 10) // High rate for concurrent testing
-	
+
 	var wg sync.WaitGroup
 	successCount := int32(0)
-	
+
 	// Launch multiple goroutines
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
@@ -78,9 +78,9 @@ func TestTokenBucketLimiter_ConcurrentAccess(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Should have some successes but not exceed burst limit significantly
 	assert.Greater(t, int(successCount), 0)
 	assert.LessOrEqual(t, int(successCount), 20) // Some reasonable upper bound
@@ -122,7 +122,7 @@ func TestIPLimiter_Allow(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/test", nil)
 			req.RemoteAddr = tt.remoteAddr
-			
+
 			for key, value := range tt.requestHeaders {
 				req.Header.Set(key, value)
 			}
@@ -142,7 +142,7 @@ func TestIPLimiter_Allow(t *testing.T) {
 
 func TestIPLimiter_Reset(t *testing.T) {
 	limiter := NewIPLimiter(1.0, 1)
-	
+
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:12345"
 
@@ -177,7 +177,7 @@ func TestUpstreamLimiter_Allow(t *testing.T) {
 
 func TestUpstreamLimiter_EmptyUpstreamName(t *testing.T) {
 	limiter := NewUpstreamLimiter(1.0, 1)
-	
+
 	// Empty upstream name should default to allow
 	allowed := limiter.Allow("")
 	assert.True(t, allowed)
@@ -232,7 +232,7 @@ func TestRateLimitFactory_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			limiter, err := factory.Create(tt.perSecond, tt.burst)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, limiter)
@@ -247,21 +247,21 @@ func TestRateLimitFactory_Create(t *testing.T) {
 
 func TestRateLimitMiddleware(t *testing.T) {
 	middleware := NewRateLimitMiddleware(1.0, 1, 1.0, 1)
-	
+
 	// Test that middleware is enabled by default
 	assert.True(t, middleware.IsEnabled())
-	
+
 	// Test enable/disable
 	middleware.Disable()
 	assert.False(t, middleware.IsEnabled())
-	
+
 	middleware.Enable()
 	assert.True(t, middleware.IsEnabled())
 }
 
 func TestRateLimitMiddleware_ResetMethods(t *testing.T) {
 	middleware := NewRateLimitMiddleware(1.0, 1, 1.0, 1)
-	
+
 	// Test reset methods don't panic
 	middleware.ResetIP("192.168.1.1")
 	middleware.ResetUpstream("upstream1")
@@ -269,7 +269,7 @@ func TestRateLimitMiddleware_ResetMethods(t *testing.T) {
 
 func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
-	
+
 	assert.Equal(t, 100.0, config.PerSecond)
 	assert.Equal(t, 200, config.Burst)
 }
@@ -318,7 +318,7 @@ func TestParseFirstIP(t *testing.T) {
 // Benchmark tests
 func BenchmarkTokenBucketLimiter_Allow(b *testing.B) {
 	limiter := NewTokenBucketLimiter(1000.0, 1000) // High limits to avoid blocking
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		limiter.Allow("benchmark-key")
@@ -327,7 +327,7 @@ func BenchmarkTokenBucketLimiter_Allow(b *testing.B) {
 
 func BenchmarkTokenBucketLimiter_ConcurrentAllow(b *testing.B) {
 	limiter := NewTokenBucketLimiter(10000.0, 10000) // Very high limits
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -340,7 +340,7 @@ func BenchmarkIPLimiter_Allow(b *testing.B) {
 	limiter := NewIPLimiter(1000.0, 1000)
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "192.168.1.1:12345"
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		limiter.Allow(req)
@@ -349,7 +349,7 @@ func BenchmarkIPLimiter_Allow(b *testing.B) {
 
 func TestRateLimitMiddleware_Middleware(t *testing.T) {
 	middleware := NewRateLimitMiddleware(1.0, 1, 1.0, 1)
-	
+
 	t.Run("middleware creation", func(t *testing.T) {
 		handler := middleware.Middleware()
 		assert.NotNil(t, handler)
@@ -377,7 +377,7 @@ func TestRateLimitConfigValidation(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name:      "negative perSecond", 
+			name:      "negative perSecond",
 			perSecond: -1.0,
 			burst:     100,
 			wantError: true,
@@ -395,12 +395,12 @@ func TestRateLimitConfigValidation(t *testing.T) {
 			wantError: true,
 		},
 	}
-	
+
 	factory := NewFactory()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			limiter, err := factory.Create(tt.perSecond, tt.burst)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, limiter)
@@ -414,20 +414,20 @@ func TestRateLimitConfigValidation(t *testing.T) {
 
 func TestIPLimiter_EdgeCases(t *testing.T) {
 	limiter := NewIPLimiter(1.0, 1)
-	
+
 	t.Run("request with no RemoteAddr", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.RemoteAddr = ""
-		
+
 		allowed := limiter.Allow(req)
 		// Should handle gracefully - either allow or deny, but not crash
 		assert.IsType(t, false, allowed)
 	})
-	
+
 	t.Run("IPv6 address", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.RemoteAddr = "[2001:db8::1]:8080"
-		
+
 		allowed := limiter.Allow(req)
 		assert.True(t, allowed) // First request should be allowed
 	})
@@ -435,19 +435,19 @@ func TestIPLimiter_EdgeCases(t *testing.T) {
 
 func TestUpstreamLimiter_EdgeCases(t *testing.T) {
 	limiter := NewUpstreamLimiter(1.0, 1)
-	
+
 	t.Run("empty upstream name", func(t *testing.T) {
 		allowed := limiter.Allow("")
 		assert.True(t, allowed) // Should allow empty upstream
 	})
-	
+
 	t.Run("special characters in upstream name", func(t *testing.T) {
 		upstream := "upstream-with-special@chars#123"
-		
+
 		// First request should pass
 		allowed := limiter.Allow(upstream)
 		assert.True(t, allowed)
-		
+
 		// Second should be limited
 		allowed = limiter.Allow(upstream)
 		assert.False(t, allowed)
@@ -457,20 +457,20 @@ func TestUpstreamLimiter_EdgeCases(t *testing.T) {
 func TestTokenBucketLimiter_EdgeCases(t *testing.T) {
 	t.Run("very high burst", func(t *testing.T) {
 		limiter := NewTokenBucketLimiter(1.0, 10000)
-		
+
 		// Should handle high burst gracefully
 		for i := 0; i < 5000; i++ {
 			allowed := limiter.Allow("test-key")
 			assert.True(t, allowed)
 		}
 	})
-	
+
 	t.Run("very low rate", func(t *testing.T) {
 		limiter := NewTokenBucketLimiter(0.1, 1) // 1 per 10 seconds
-		
+
 		allowed := limiter.Allow("test-key")
 		assert.True(t, allowed) // First should pass
-		
+
 		allowed = limiter.Allow("test-key")
 		assert.False(t, allowed) // Second should fail
 	})

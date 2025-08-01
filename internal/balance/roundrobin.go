@@ -3,6 +3,8 @@ package balance
 import (
 	"context"
 	"sync/atomic"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // RRBalancer 实现轮询负载均衡算法
@@ -56,5 +58,5 @@ func (b *RRBalancer) UpdateLatency(upstreamName string, latency int64) {
 
 // Type 获取负载均衡器类型
 func (b *RRBalancer) Type() string {
-	return "roundrobin"
+	return constants.BalanceRoundRobin
 }

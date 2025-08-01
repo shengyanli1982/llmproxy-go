@@ -79,7 +79,6 @@ func TestRandomBalancer(t *testing.T) {
 	assert.True(t, selectedUpstreams["upstream3"])
 }
 
-
 func TestClientIPContext(t *testing.T) {
 	ctx := context.Background()
 

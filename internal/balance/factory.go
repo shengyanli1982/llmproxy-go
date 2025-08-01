@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // 工厂相关错误定义
 var (
-	ErrNilBalanceConfig = errors.New("balance config cannot be nil")
+	ErrNilBalanceConfig = errors.New(constants.ErrMsgNilBalanceConfig)
 )
 
 // BalanceFactory 代表负载均衡器工厂实现
@@ -29,17 +30,17 @@ func (f *BalanceFactory) Create(config *config.BalanceConfig) (LoadBalancer, err
 
 	strategy := config.Strategy
 	if strategy == "" {
-		strategy = "roundrobin" // 默认使用轮询
+		strategy = constants.DefaultBalanceStrategy // 默认使用轮询
 	}
 
 	switch strategy {
-	case "roundrobin":
+	case constants.BalanceRoundRobin:
 		return NewRRBalancer(), nil
-	case "weighted_roundrobin":
+	case constants.BalanceWeightedRoundRobin:
 		return NewWeightedRRBalancer(), nil
-	case "random":
+	case constants.BalanceRandom:
 		return NewRandomBalancer(), nil
-	case "iphash":
+	case constants.BalanceIPHash:
 		return NewIPHashBalancer(), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownStrategy, strategy)

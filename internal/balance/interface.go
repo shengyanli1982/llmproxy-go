@@ -8,6 +8,7 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/breaker"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
 	"github.com/sony/gobreaker"
 )
@@ -21,10 +22,10 @@ var clientIPContextKey = clientIPKey{}
 
 // 负载均衡相关错误定义
 var (
-	ErrNoAvailableUpstream = errors.New("no available upstream")
-	ErrUnknownStrategy     = errors.New("unknown load balance strategy")
-	ErrNilUpstreams        = errors.New("upstreams cannot be nil")
-	ErrEmptyUpstreams      = errors.New("upstreams cannot be empty")
+	ErrNoAvailableUpstream = errors.New(constants.ErrMsgNoAvailableUpstream)
+	ErrUnknownStrategy     = errors.New(constants.ErrMsgUnknownStrategy)
+	ErrNilUpstreams        = errors.New(constants.ErrMsgNilUpstreams)
+	ErrEmptyUpstreams      = errors.New(constants.ErrMsgEmptyUpstreams)
 )
 
 // Upstream 代表一个上游服务实例
@@ -33,10 +34,10 @@ type Upstream struct {
 	URL    string                 // 上游服务 URL
 	Weight int                    // 权重（用于加权轮询）
 	Config *config.UpstreamConfig // 上游服务配置
-	
+
 	// 预初始化的组件实例，避免重复创建
-	Authenticator auth.Authenticator       // 认证器（缓存）
-	Breaker       breaker.CircuitBreaker   // 熔断器
+	Authenticator auth.Authenticator         // 认证器（缓存）
+	Breaker       breaker.CircuitBreaker     // 熔断器
 	RateLimiter   *ratelimit.UpstreamLimiter // 限流器
 }
 

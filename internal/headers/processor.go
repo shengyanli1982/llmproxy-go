@@ -33,7 +33,7 @@ func (p *Processor) ApplyToRequest(req *http.Request, ops []config.HeaderOpConfi
 	if req == nil {
 		return ErrNilHeader
 	}
-	
+
 	return p.operator.Process(req.Header, ops)
 }
 
@@ -44,12 +44,12 @@ func (p *Processor) ApplyFromUpstreamConfig(req *http.Request, upstreamConfig *c
 	if req == nil {
 		return ErrNilHeader
 	}
-	
+
 	if upstreamConfig == nil || len(upstreamConfig.Headers) == 0 {
 		// 没有头部操作配置，直接返回
 		return nil
 	}
-	
+
 	return p.operator.Process(req.Header, upstreamConfig.Headers)
 }
 
@@ -61,13 +61,13 @@ func (p *Processor) InsertHeader(req *http.Request, key, value string) error {
 	if req == nil {
 		return ErrNilHeader
 	}
-	
+
 	op := config.HeaderOpConfig{
 		Op:    "insert",
 		Key:   key,
 		Value: value,
 	}
-	
+
 	return p.operator.ProcessSingle(req.Header, op)
 }
 
@@ -79,13 +79,13 @@ func (p *Processor) ReplaceHeader(req *http.Request, key, value string) error {
 	if req == nil {
 		return ErrNilHeader
 	}
-	
+
 	op := config.HeaderOpConfig{
 		Op:    "replace",
 		Key:   key,
 		Value: value,
 	}
-	
+
 	return p.operator.ProcessSingle(req.Header, op)
 }
 
@@ -96,12 +96,12 @@ func (p *Processor) RemoveHeader(req *http.Request, key string) error {
 	if req == nil {
 		return ErrNilHeader
 	}
-	
+
 	op := config.HeaderOpConfig{
 		Op:  "remove",
 		Key: key,
 	}
-	
+
 	return p.operator.ProcessSingle(req.Header, op)
 }
 

@@ -6,7 +6,8 @@ import (
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require")
+	"github.com/stretchr/testify/require"
+)
 
 // TestBearerAuthenticator 测试Bearer Token认证
 func TestBearerAuthenticator(t *testing.T) {
@@ -38,7 +39,7 @@ func TestBearerAuthenticator(t *testing.T) {
 func TestBearerAuthenticator_Apply_NilRequest(t *testing.T) {
 	auth, err := NewBearerAuthenticator("test-token")
 	require.NoError(t, err)
-	
+
 	err = auth.Apply(nil)
 	assert.Error(t, err)
 }
@@ -79,7 +80,7 @@ func TestBasicAuthenticator(t *testing.T) {
 func TestBasicAuthenticator_Apply_NilRequest(t *testing.T) {
 	auth, err := NewBasicAuthenticator("user", "pass")
 	require.NoError(t, err)
-	
+
 	err = auth.Apply(nil)
 	assert.Error(t, err)
 }
@@ -87,7 +88,7 @@ func TestBasicAuthenticator_Apply_NilRequest(t *testing.T) {
 // TestNoneAuthenticator 测试无认证
 func TestNoneAuthenticator(t *testing.T) {
 	auth := NewNoneAuthenticator()
-	
+
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	err := auth.Apply(req)
 	if err != nil {
@@ -156,7 +157,7 @@ func TestFactory(t *testing.T) {
 // TestFactory_Create_ValidationErrors 测试工厂创建时的验证错误
 func TestFactory_Create_ValidationErrors(t *testing.T) {
 	factory := NewFactory()
-	
+
 	tests := []struct {
 		name      string
 		config    *config.AuthConfig
@@ -201,11 +202,11 @@ func TestFactory_Create_ValidationErrors(t *testing.T) {
 			wantError: "",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			auth, err := factory.Create(tt.config)
-			
+
 			if tt.wantError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantError)
@@ -285,11 +286,11 @@ func TestCreateFromConfig(t *testing.T) {
 			wantError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			auth, err := CreateFromConfig(tt.config)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, auth)
@@ -305,14 +306,14 @@ func TestCreateFromConfig(t *testing.T) {
 // TestConfigDefaultYamlAuthTypes 测试config.default.yaml中的认证类型
 func TestConfigDefaultYamlAuthTypes(t *testing.T) {
 	factory := NewFactory()
-	
+
 	// Test auth types from config.default.yaml
 	authTypes := []string{"bearer", "basic", "none"}
-	
+
 	for _, authType := range authTypes {
 		t.Run("auth_type_"+authType, func(t *testing.T) {
 			var authConfig *config.AuthConfig
-			
+
 			switch authType {
 			case "bearer":
 				authConfig = &config.AuthConfig{
@@ -330,7 +331,7 @@ func TestConfigDefaultYamlAuthTypes(t *testing.T) {
 					Type: "none",
 				}
 			}
-			
+
 			auth, err := factory.Create(authConfig)
 			assert.NoError(t, err)
 			assert.NotNil(t, auth)

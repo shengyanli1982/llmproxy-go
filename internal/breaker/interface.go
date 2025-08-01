@@ -6,10 +6,10 @@ import "github.com/sony/gobreaker"
 type CircuitBreaker interface {
 	// Execute 执行受保护的操作
 	Execute(req func() (interface{}, error)) (interface{}, error)
-	
+
 	// Name 获取熔断器名称
 	Name() string
-	
+
 	// State 获取当前状态
 	State() gobreaker.State
 }

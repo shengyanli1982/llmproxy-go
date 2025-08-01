@@ -111,10 +111,10 @@ func TestFactory_Create(t *testing.T) {
 	factory := NewFactory()
 
 	tests := []struct {
-		name       string
-		config     *config.AuthConfig
-		wantType   string
-		wantError  bool
+		name      string
+		config    *config.AuthConfig
+		wantType  string
+		wantError bool
 	}{
 		{
 			name: "bearer auth",
@@ -144,10 +144,10 @@ func TestFactory_Create(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name:       "nil config",
-			config:     nil,
-			wantType:   "",
-			wantError:  true,
+			name:      "nil config",
+			config:    nil,
+			wantType:  "",
+			wantError: true,
 		},
 		{
 			name: "unknown type",
@@ -170,7 +170,7 @@ func TestFactory_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			auth, err := factory.Create(tt.config)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, auth)
@@ -185,24 +185,24 @@ func TestFactory_Create(t *testing.T) {
 
 func TestAuthenticatorTypes(t *testing.T) {
 	tests := []struct {
-		name         string
+		name          string
 		authenticator Authenticator
-		expectedType string
+		expectedType  string
 	}{
 		{
-			name:         "bearer authenticator",
+			name:          "bearer authenticator",
 			authenticator: &bearerAuthenticator{},
-			expectedType: "bearer",
+			expectedType:  "bearer",
 		},
 		{
-			name:         "basic authenticator",
+			name:          "basic authenticator",
 			authenticator: &basicAuthenticator{},
-			expectedType: "basic",
+			expectedType:  "basic",
 		},
 		{
-			name:         "none authenticator",
+			name:          "none authenticator",
 			authenticator: &noneAuthenticator{},
-			expectedType: "none",
+			expectedType:  "none",
 		},
 	}
 
@@ -217,7 +217,7 @@ func TestAuthenticatorTypes(t *testing.T) {
 func BenchmarkBearerAuthenticator_Apply(b *testing.B) {
 	auth := &bearerAuthenticator{token: "test-token"}
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		auth.Apply(req)
@@ -227,7 +227,7 @@ func BenchmarkBearerAuthenticator_Apply(b *testing.B) {
 func BenchmarkBasicAuthenticator_Apply(b *testing.B) {
 	auth := &basicAuthenticator{username: "user", password: "pass"}
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		auth.Apply(req)

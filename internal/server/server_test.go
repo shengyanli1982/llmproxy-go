@@ -841,7 +841,7 @@ func TestForwardService_CircuitBreakerIntegration(t *testing.T) {
 				{
 					Name: "test-group",
 					Balance: &config.BalanceConfig{
-						Strategy: "failover", // 使用支持熔断器的负载均衡器
+						Strategy: "roundrobin", // 使用轮询负载均衡器
 					},
 					Upstreams: []config.UpstreamRefConfig{
 						{Name: "test-upstream-lb", Weight: 1},

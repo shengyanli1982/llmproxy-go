@@ -17,7 +17,7 @@ func (l *UpstreamLimiter) Allow(upstreamName string) bool {
 	if upstreamName == "" {
 		return true // 无上游名称时默认通过
 	}
-	
+
 	return l.limiter.Allow(upstreamName)
 }
 

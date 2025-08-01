@@ -632,9 +632,9 @@ func TestBalanceConfig_Validation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid failover strategy",
+			name: "valid iphash strategy",
 			config: BalanceConfig{
-				Strategy: "failover",
+				Strategy: "iphash",
 			},
 			wantErr: false,
 		},

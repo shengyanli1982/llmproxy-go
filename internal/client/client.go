@@ -11,15 +11,16 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 	"github.com/shengyanli1982/llmproxy-go/internal/headers"
 )
 
 // 客户端相关错误定义
 var (
-	ErrNilRequest     = errors.New("request cannot be nil")
-	ErrNilUpstream    = errors.New("upstream cannot be nil")
-	ErrClientClosed   = errors.New("client is closed")
-	ErrInvalidTimeout = errors.New("invalid timeout configuration")
+	ErrNilRequest     = errors.New(constants.ErrMsgNilRequest)
+	ErrNilUpstream    = errors.New(constants.ErrMsgNilUpstream)
+	ErrClientClosed   = errors.New(constants.ErrMsgClientClosed)
+	ErrInvalidTimeout = errors.New(constants.ErrMsgInvalidTimeout)
 )
 
 // httpClient HTTP客户端实现
@@ -53,7 +54,7 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 	}
 
 	// 获取请求超时时间
-	requestTimeout := 60000 // 默认60000毫秒
+	requestTimeout := constants.DefaultRequestTimeout // 默认60000毫秒
 	if cfg.Timeout != nil {
 		requestTimeout = cfg.Timeout.Request
 	}
@@ -165,14 +166,14 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 	upstreamURL, err = url.Parse(upstream.URL)
 	if err != nil {
 		// 如果解析失败，可能是因为缺少scheme，尝试添加http://前缀
-		upstreamURL, err = url.Parse("http://" + upstream.URL)
+		upstreamURL, err = url.Parse(constants.DefaultScheme + upstream.URL)
 		if err != nil {
 			c.logger.Error(err, "Invalid upstream URL", "upstream", upstream.Name, "url", upstream.URL)
 			return fmt.Errorf("invalid upstream URL '%s': %w", upstream.URL, err)
 		}
 	} else if upstreamURL.Scheme == "" {
 		// 如果解析成功但没有scheme，添加http://前缀重新解析
-		upstreamURL, err = url.Parse("http://" + upstream.URL)
+		upstreamURL, err = url.Parse(constants.DefaultScheme + upstream.URL)
 		if err != nil {
 			c.logger.Error(err, "Invalid upstream URL after adding scheme", "upstream", upstream.Name, "url", upstream.URL)
 			return fmt.Errorf("invalid upstream URL '%s': %w", upstream.URL, err)
@@ -218,10 +219,14 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 	// 它们保持用户请求的原始值，实现了"基础URL + 用户路径"的拼接机制
 
 	// 应用认证（使用缓存的认证器）
-	c.logger.Info("Applying authentication", "upstream", upstream.Name, "auth_type", upstream.Authenticator.Type())
-	if err := upstream.ApplyAuth(req); err != nil {
-		c.logger.Error(err, "Failed to apply authentication", "upstream", upstream.Name)
-		return fmt.Errorf("failed to apply authentication: %w", err)
+	if upstream.Authenticator != nil {
+		c.logger.Info("Applying authentication", "upstream", upstream.Name, "auth_type", upstream.Authenticator.Type())
+		if err := upstream.ApplyAuth(req); err != nil {
+			c.logger.Error(err, "Failed to apply authentication", "upstream", upstream.Name)
+			return fmt.Errorf("failed to apply authentication: %w", err)
+		}
+	} else {
+		c.logger.Info("No authentication configured", "upstream", upstream.Name)
 	}
 
 	// 应用头部操作（如果配置中有）
@@ -248,21 +253,21 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 // setDefaultHeaders 设置默认HTTP头部
 func (c *httpClient) setDefaultHeaders(req *http.Request) {
 	// 设置User-Agent
-	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", "LLMProxy/1.0")
+	if req.Header.Get(constants.HeaderUserAgent) == "" {
+		req.Header.Set(constants.HeaderUserAgent, constants.UserAgent)
 	}
 
 	// 设置Connection头部
 	// 如果KeepAlive为0，表示禁用Keep-Alive
 	if c.config.KeepAlive == 0 {
-		req.Header.Set("Connection", "close")
+		req.Header.Set(constants.HeaderConnection, constants.ConnectionClose)
 	} else {
-		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set(constants.HeaderConnection, constants.ConnectionKeepAlive)
 	}
 
 	// 保持原始Host头部用于代理
-	if req.Header.Get("X-Forwarded-Host") == "" && req.Host != "" {
-		req.Header.Set("X-Forwarded-Host", req.Host)
+	if req.Header.Get(constants.HeaderXForwardedHost) == "" && req.Host != "" {
+		req.Header.Set(constants.HeaderXForwardedHost, req.Host)
 	}
 }
 

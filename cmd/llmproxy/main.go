@@ -12,12 +12,13 @@ import (
 	"github.com/shengyanli1982/gs"
 	"github.com/shengyanli1982/law"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 	"github.com/shengyanli1982/llmproxy-go/internal/server"
 	"github.com/shengyanli1982/orbit/utils/log"
 )
 
 // Version 通过 ldflags 在编译时设置
-var Version = "0.2.0"
+var Version = constants.DefaultVersion
 
 const ASCII_LOGO = `
 ██╗     ██╗     ███╗   ███╗██████╗ ██████╗  ██████╗ ██╗  ██╗██╗   ██╗
@@ -197,13 +198,13 @@ Repository: https://github.com/shengyanli1982/llmproxy-go`,
 	}
 
 	// 注册命令行参数
-	cmd.Flags().StringVarP(&configPath, "config", "c", "./config.yaml", "Path to configuration file")
-	cmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Enable JSON format logging output (only effective in release mode)")
-	cmd.Flags().BoolVarP(&releaseMode, "release", "r", false, "Enable release mode for performance optimizations and async logging")
+	cmd.Flags().StringVarP(&configPath, constants.FlagConfig, constants.FlagConfigShort, constants.DefaultConfigPath, "Path to configuration file")
+	cmd.Flags().BoolVarP(&jsonOutput, constants.FlagJSON, constants.FlagJSONShort, false, "Enable JSON format logging output (only effective in release mode)")
+	cmd.Flags().BoolVarP(&releaseMode, constants.FlagRelease, constants.FlagReleaseShort, false, "Enable release mode for performance optimizations and async logging")
 
 	// 执行命令
 	if err := cmd.Execute(); err != nil {
 		fmt.Printf("Failed to execute command: %v\n", err)
-		os.Exit(-1)
+		os.Exit(constants.ExitFailure)
 	}
 }

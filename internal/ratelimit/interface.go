@@ -4,10 +4,10 @@ package ratelimit
 type RateLimiter interface {
 	// Allow 检查指定key是否允许通过
 	Allow(key string) bool
-	
+
 	// Reset 重置指定key的限流状态
 	Reset(key string)
-	
+
 	// Type 获取限流器类型
 	Type() string
 }

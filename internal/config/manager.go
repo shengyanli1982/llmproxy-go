@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v3"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // 全局验证器实例，用于配置验证
@@ -149,41 +151,41 @@ func (m *Manager) setForwardDefaults(config *Config) {
 	for i := range config.HTTPServer.Forwards {
 		forward := &config.HTTPServer.Forwards[i]
 		if forward.Address == "" {
-			forward.Address = "0.0.0.0"
+			forward.Address = constants.DefaultAddress
 		}
 		// 只有用户显式配置了ratelimit时才设置子字段默认值
 		if forward.RateLimit != nil {
 			if forward.RateLimit.PerSecond == 0 {
-				forward.RateLimit.PerSecond = 100
+				forward.RateLimit.PerSecond = constants.DefaultRatePerSecond
 			}
 			if forward.RateLimit.Burst == 0 {
-				forward.RateLimit.Burst = 1
+				forward.RateLimit.Burst = constants.DefaultRateBurst
 			}
 		}
 		if forward.Timeout == nil {
 			forward.Timeout = &TimeoutConfig{
-				Idle:    60000,
-				Read:    30000,
-				Write:   30000,
-				Connect: 10000,
-				Request: 300000,
+				Idle:    constants.DefaultIdleTimeout,
+				Read:    constants.DefaultReadTimeout,
+				Write:   constants.DefaultWriteTimeout,
+				Connect: constants.DefaultConnectTimeout,
+				Request: constants.DefaultForwardRequestTimeout,
 			}
 		} else {
 			// 如果Timeout存在但某些字段为0，设置默认值
 			if forward.Timeout.Idle == 0 {
-				forward.Timeout.Idle = 60000
+				forward.Timeout.Idle = constants.DefaultIdleTimeout
 			}
 			if forward.Timeout.Read == 0 {
-				forward.Timeout.Read = 30000
+				forward.Timeout.Read = constants.DefaultReadTimeout
 			}
 			if forward.Timeout.Write == 0 {
-				forward.Timeout.Write = 30000
+				forward.Timeout.Write = constants.DefaultWriteTimeout
 			}
 			if forward.Timeout.Connect == 0 {
-				forward.Timeout.Connect = 10000
+				forward.Timeout.Connect = constants.DefaultConnectTimeout
 			}
 			if forward.Timeout.Request == 0 {
-				forward.Timeout.Request = 300000
+				forward.Timeout.Request = constants.DefaultForwardRequestTimeout
 			}
 		}
 	}
@@ -192,35 +194,35 @@ func (m *Manager) setForwardDefaults(config *Config) {
 // setAdminDefaults 设置管理服务的默认值
 func (m *Manager) setAdminDefaults(config *Config) {
 	if config.HTTPServer.Admin.Port == 0 {
-		config.HTTPServer.Admin.Port = 9000
+		config.HTTPServer.Admin.Port = constants.DefaultAdminPort
 	}
 	if config.HTTPServer.Admin.Address == "" {
-		config.HTTPServer.Admin.Address = "0.0.0.0"
+		config.HTTPServer.Admin.Address = constants.DefaultAddress
 	}
 	if config.HTTPServer.Admin.Timeout == nil {
 		config.HTTPServer.Admin.Timeout = &TimeoutConfig{
-			Idle:    60000,
-			Read:    30000,
-			Write:   30000,
-			Connect: 10000,
-			Request: 300000,
+			Idle:    constants.DefaultIdleTimeout,
+			Read:    constants.DefaultReadTimeout,
+			Write:   constants.DefaultWriteTimeout,
+			Connect: constants.DefaultConnectTimeout,
+			Request: constants.DefaultForwardRequestTimeout,
 		}
 	} else {
 		// 如果Timeout存在但某些字段为0，设置默认值
 		if config.HTTPServer.Admin.Timeout.Idle == 0 {
-			config.HTTPServer.Admin.Timeout.Idle = 60000
+			config.HTTPServer.Admin.Timeout.Idle = constants.DefaultIdleTimeout
 		}
 		if config.HTTPServer.Admin.Timeout.Read == 0 {
-			config.HTTPServer.Admin.Timeout.Read = 30000
+			config.HTTPServer.Admin.Timeout.Read = constants.DefaultReadTimeout
 		}
 		if config.HTTPServer.Admin.Timeout.Write == 0 {
-			config.HTTPServer.Admin.Timeout.Write = 30000
+			config.HTTPServer.Admin.Timeout.Write = constants.DefaultWriteTimeout
 		}
 		if config.HTTPServer.Admin.Timeout.Connect == 0 {
-			config.HTTPServer.Admin.Timeout.Connect = 10000
+			config.HTTPServer.Admin.Timeout.Connect = constants.DefaultConnectTimeout
 		}
 		if config.HTTPServer.Admin.Timeout.Request == 0 {
-			config.HTTPServer.Admin.Timeout.Request = 300000
+			config.HTTPServer.Admin.Timeout.Request = constants.DefaultForwardRequestTimeout
 		}
 	}
 }
@@ -230,30 +232,30 @@ func (m *Manager) setUpstreamDefaults(config *Config) {
 	for i := range config.Upstreams {
 		upstream := &config.Upstreams[i]
 		if upstream.Auth == nil {
-			upstream.Auth = &AuthConfig{Type: "none"}
+			upstream.Auth = &AuthConfig{Type: constants.AuthTypeNone}
 		} else if upstream.Auth.Type == "" {
-			upstream.Auth.Type = "none"
+			upstream.Auth.Type = constants.AuthTypeNone
 		}
 		if upstream.Breaker != nil {
 			if upstream.Breaker.Threshold == 0 {
-				upstream.Breaker.Threshold = 0.5
+				upstream.Breaker.Threshold = constants.DefaultBreakerThreshold
 			}
 			if upstream.Breaker.Cooldown == 0 {
-				upstream.Breaker.Cooldown = 30000
+				upstream.Breaker.Cooldown = constants.DefaultBreakerCooldown
 			}
 			if upstream.Breaker.MaxRequests == 0 {
-				upstream.Breaker.MaxRequests = 3
+				upstream.Breaker.MaxRequests = constants.DefaultBreakerMaxRequests
 			}
 			if upstream.Breaker.Interval == 0 {
-				upstream.Breaker.Interval = 10000
+				upstream.Breaker.Interval = constants.DefaultBreakerInterval
 			}
 		}
 		if upstream.RateLimit != nil {
 			if upstream.RateLimit.Burst == 0 {
-				upstream.RateLimit.Burst = 1
+				upstream.RateLimit.Burst = constants.DefaultRateBurst
 			}
 			if upstream.RateLimit.PerSecond == 0 {
-				upstream.RateLimit.PerSecond = 100
+				upstream.RateLimit.PerSecond = constants.DefaultRatePerSecond
 			}
 		}
 	}
@@ -264,76 +266,76 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 	for i := range config.UpstreamGroups {
 		group := &config.UpstreamGroups[i]
 		if group.Balance == nil {
-			group.Balance = &BalanceConfig{Strategy: "roundrobin"}
+			group.Balance = &BalanceConfig{Strategy: constants.DefaultBalanceStrategy}
 		}
 		if group.HTTPClient == nil {
 			group.HTTPClient = &HTTPClientConfig{
-				Agent:     "LLMProxy/1.0",
-				KeepAlive: 60000,
+				Agent:     constants.UserAgent,
+				KeepAlive: constants.DefaultKeepAlive,
 				Connect: &ConnectConfig{
-					IdleTotal:   100,
-					IdlePerHost: 10,
-					MaxPerHost:  50,
+					IdleTotal:   constants.DefaultIdleTotal,
+					IdlePerHost: constants.DefaultIdlePerHost,
+					MaxPerHost:  constants.DefaultMaxPerHost,
 				},
 				Timeout: &TimeoutConfig{
-					Connect: 10000,
-					Request: 300000,
-					Idle:    60000,
-					Read:    30000,
-					Write:   30000,
+					Connect: constants.DefaultConnectTimeout,
+					Request: constants.DefaultForwardRequestTimeout,
+					Idle:    constants.DefaultIdleTimeout,
+					Read:    constants.DefaultReadTimeout,
+					Write:   constants.DefaultWriteTimeout,
 				},
 			}
 		} else {
 			// 如果HTTPClient存在但KeepAlive为0，设置默认值
 			if group.HTTPClient.KeepAlive == 0 {
-				group.HTTPClient.KeepAlive = 60000
+				group.HTTPClient.KeepAlive = constants.DefaultKeepAlive
 			}
 
 			// 如果HTTPClient存在但Connect为nil，设置默认的Connect配置
 			if group.HTTPClient.Connect == nil {
 				group.HTTPClient.Connect = &ConnectConfig{
-					IdleTotal:   100,
-					IdlePerHost: 10,
-					MaxPerHost:  50,
+					IdleTotal:   constants.DefaultIdleTotal,
+					IdlePerHost: constants.DefaultIdlePerHost,
+					MaxPerHost:  constants.DefaultMaxPerHost,
 				}
 			} else {
 				// 如果Connect存在但某些字段为0，设置默认值
 				if group.HTTPClient.Connect.IdleTotal == 0 {
-					group.HTTPClient.Connect.IdleTotal = 100
+					group.HTTPClient.Connect.IdleTotal = constants.DefaultIdleTotal
 				}
 				if group.HTTPClient.Connect.IdlePerHost == 0 {
-					group.HTTPClient.Connect.IdlePerHost = 10
+					group.HTTPClient.Connect.IdlePerHost = constants.DefaultIdlePerHost
 				}
 				if group.HTTPClient.Connect.MaxPerHost == 0 {
-					group.HTTPClient.Connect.MaxPerHost = 50
+					group.HTTPClient.Connect.MaxPerHost = constants.DefaultMaxPerHost
 				}
 			}
 
 			// 如果HTTPClient存在但Timeout为nil，设置默认的Timeout配置
 			if group.HTTPClient.Timeout == nil {
 				group.HTTPClient.Timeout = &TimeoutConfig{
-					Connect: 10000,
-					Request: 300000,
-					Idle:    60000,
-					Read:    30000,
-					Write:   30000,
+					Connect: constants.DefaultConnectTimeout,
+					Request: constants.DefaultForwardRequestTimeout,
+					Idle:    constants.DefaultIdleTimeout,
+					Read:    constants.DefaultReadTimeout,
+					Write:   constants.DefaultWriteTimeout,
 				}
 			} else {
 				// 如果Timeout存在但某些字段为0，设置默认值
 				if group.HTTPClient.Timeout.Connect == 0 {
-					group.HTTPClient.Timeout.Connect = 10000
+					group.HTTPClient.Timeout.Connect = constants.DefaultConnectTimeout
 				}
 				if group.HTTPClient.Timeout.Request == 0 {
-					group.HTTPClient.Timeout.Request = 300000
+					group.HTTPClient.Timeout.Request = constants.DefaultForwardRequestTimeout
 				}
 				if group.HTTPClient.Timeout.Idle == 0 {
-					group.HTTPClient.Timeout.Idle = 60000
+					group.HTTPClient.Timeout.Idle = constants.DefaultIdleTimeout
 				}
 				if group.HTTPClient.Timeout.Read == 0 {
-					group.HTTPClient.Timeout.Read = 30000
+					group.HTTPClient.Timeout.Read = constants.DefaultReadTimeout
 				}
 				if group.HTTPClient.Timeout.Write == 0 {
-					group.HTTPClient.Timeout.Write = 30000
+					group.HTTPClient.Timeout.Write = constants.DefaultWriteTimeout
 				}
 			}
 		}
@@ -341,7 +343,7 @@ func (m *Manager) setUpstreamGroupDefaults(config *Config) {
 		// 设置上游引用权重默认值
 		for j := range group.Upstreams {
 			if group.Upstreams[j].Weight == 0 {
-				group.Upstreams[j].Weight = 1
+				group.Upstreams[j].Weight = constants.DefaultWeight
 			}
 		}
 	}
@@ -355,13 +357,13 @@ func validateAuthConditional(fl validator.FieldLevel) bool {
 	}
 
 	switch auth.Type {
-	case "bearer":
+	case constants.AuthTypeBearer:
 		// 当type为bearer时，token必填
 		return auth.Token != ""
-	case "basic":
+	case constants.AuthTypeBasic:
 		// 当type为basic时，username和password必填
 		return auth.Username != "" && auth.Password != ""
-	case "none", "":
+	case constants.AuthTypeNone, "":
 		// 当type为none或空时，不需要其他字段
 		return true
 	default:
@@ -377,10 +379,10 @@ func validateHeaderConditional(fl validator.FieldLevel) bool {
 	}
 
 	switch header.Op {
-	case "insert", "replace":
+	case constants.HeaderOpInsert, constants.HeaderOpReplace:
 		// 当op为insert或replace时，value必填
 		return header.Value != ""
-	case "remove":
+	case constants.HeaderOpRemove:
 		// 当op为remove时，value可选
 		return true
 	default:
@@ -403,7 +405,7 @@ func validateHTTPURL(fl validator.FieldLevel) bool {
 
 	// 检查协议必须是http或https（大小写不敏感）
 	scheme := strings.ToLower(parsedURL.Scheme)
-	if scheme != "http" && scheme != "https" {
+	if scheme != constants.ProtocolHTTP && scheme != constants.ProtocolHTTPS {
 		return false // 协议必须是http或https
 	}
 
