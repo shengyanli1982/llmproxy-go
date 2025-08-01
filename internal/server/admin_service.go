@@ -53,9 +53,6 @@ func (s *AdminService) Initialize(config *config.AdminConfig, globalConfig *conf
 func (s *AdminService) RegisterGroup(g *gin.RouterGroup) {
 	// 统一指标端点（替代 orbit 框架的默认 /metrics）
 	g.GET("/metrics", s.handleMetrics)
-
-	// 保留自定义指标端点用于调试
-	g.GET("/metrics/custom", s.handleCustomMetrics)
 }
 
 // Run 启动管理服务
@@ -106,32 +103,6 @@ func (s *AdminService) handleMetrics(c *gin.Context) {
 	}
 
 	// 获取全局指标注册器
-	registry := s.metricsRegistry.GetRegistry()
-	if registry == nil {
-		response.Error(response.CodeInternalError, "metrics registry not initialized").JSON(c, http.StatusInternalServerError)
-		return
-	}
-
-	// 使用 Prometheus HTTP 处理器
-	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{
-		EnableOpenMetrics: true,
-	})
-
-	// 将 Gin 上下文转换为标准 HTTP 处理器
-	handler.ServeHTTP(c.Writer, c.Request)
-}
-
-// handleCustomMetrics 处理自定义指标请求
-func (s *AdminService) handleCustomMetrics(c *gin.Context) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.metricsRegistry == nil {
-		response.Error(response.CodeNotFound, "metrics registry not available").JSON(c, http.StatusNotFound)
-		return
-	}
-
-	// 获取自定义指标注册器
 	registry := s.metricsRegistry.GetRegistry()
 	if registry == nil {
 		response.Error(response.CodeInternalError, "metrics registry not initialized").JSON(c, http.StatusInternalServerError)

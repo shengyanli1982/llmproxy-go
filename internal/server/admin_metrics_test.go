@@ -3,7 +3,6 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -50,72 +49,6 @@ func TestAdminService_MetricsIntegration(t *testing.T) {
 	globalRegistry := metrics.GetGlobalRegistry()
 	if service.metricsRegistry != globalRegistry {
 		t.Error("Expected AdminService to use global metrics registry")
-	}
-}
-
-// TestAdminService_CustomMetricsEndpoint 测试自定义 metrics 端点
-func TestAdminService_CustomMetricsEndpoint(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	// 创建测试配置
-	adminConfig := &config.AdminConfig{
-		Port:    8081,
-		Address: "127.0.0.1",
-		Timeout: &config.TimeoutConfig{
-			Idle:  30000,
-			Read:  15000,
-			Write: 15000,
-		},
-	}
-
-	globalConfig := &config.Config{
-		HTTPServer: config.HTTPServerConfig{
-			Admin: *adminConfig,
-		},
-	}
-
-	logger := logr.Discard()
-
-	// 创建 AdminService
-	service := NewAdminServices()
-	service.Initialize(adminConfig, globalConfig, &logger, nil)
-
-	// 创建测试路由
-	router := gin.New()
-	group := router.Group("/")
-	service.RegisterGroup(group)
-
-	// 测试自定义 metrics 端点
-	req := httptest.NewRequest("GET", "/metrics/custom", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	// 验证响应
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
-
-	// 验证响应内容类型
-	contentType := w.Header().Get("Content-Type")
-	if !strings.Contains(contentType, "text/plain") && !strings.Contains(contentType, "application/openmetrics-text") {
-		t.Errorf("Expected Prometheus metrics content type, got %s", contentType)
-	}
-
-	// 验证响应体
-	body := w.Body.String()
-
-	// 如果没有注册任何指标，响应体可能为空，这是正常的
-	// 我们主要验证端点能够正常响应，而不是一定要有内容
-	t.Logf("Metrics response body length: %d", len(body))
-
-	// 如果有内容，验证是否符合 Prometheus 格式
-	if len(body) > 0 {
-		// 基本的 Prometheus 格式验证
-		if !strings.Contains(body, "# HELP") && !strings.Contains(body, "# TYPE") {
-			t.Log("Response body:", body)
-			// 这可能是正常的，如果没有注册任何指标
-		}
 	}
 }
 
@@ -175,10 +108,10 @@ func TestAdminService_MetricsEndpointError(t *testing.T) {
 	group := router.Group("/")
 
 	// 手动注册路由（跳过完整的 RegisterGroup）
-	group.GET("/metrics/custom", service.handleCustomMetrics)
+	group.GET("/metrics", service.handleMetrics)
 
 	// 测试没有 metrics registry 的情况
-	req := httptest.NewRequest("GET", "/metrics/custom", nil)
+	req := httptest.NewRequest("GET", "/metrics", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -248,7 +181,7 @@ func TestAdminServer_MetricsRegistryIntegration(t *testing.T) {
 }
 
 // BenchmarkAdminService_CustomMetrics 基准测试自定义 metrics 端点的性能
-func BenchmarkAdminService_CustomMetrics(b *testing.B) {
+func BenchmarkAdminService_Metrics(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 
 	// 创建测试配置
@@ -282,7 +215,7 @@ func BenchmarkAdminService_CustomMetrics(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			req := httptest.NewRequest("GET", "/metrics/custom", nil)
+			req := httptest.NewRequest("GET", "/metrics", nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 		}
