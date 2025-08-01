@@ -13,6 +13,14 @@ BUILD_FLAGS := -trimpath -tags=jsoniter
 # 输出目录
 BIN_DIR := bin
 
+# ZIP 文件定义
+ZIP_PREFIX := $(PROJECT_NAME)-v$(VERSION)
+WINDOWS_AMD64_ZIP := $(BIN_DIR)/$(ZIP_PREFIX)-windows-amd64.zip
+LINUX_AMD64_ZIP := $(BIN_DIR)/$(ZIP_PREFIX)-linux-amd64.zip
+LINUX_ARM64_ZIP := $(BIN_DIR)/$(ZIP_PREFIX)-linux-arm64.zip
+DARWIN_AMD64_ZIP := $(BIN_DIR)/$(ZIP_PREFIX)-darwin-amd64.zip
+DARWIN_ARM64_ZIP := $(BIN_DIR)/$(ZIP_PREFIX)-darwin-arm64.zip
+
 # 平台和架构定义
 # Windows x64
 WINDOWS_AMD64_DIR := $(BIN_DIR)/windows-amd64
@@ -30,10 +38,10 @@ DARWIN_AMD64_BIN := $(DARWIN_AMD64_DIR)/$(PROJECT_NAME)
 DARWIN_ARM64_DIR := $(BIN_DIR)/darwin-arm64
 DARWIN_ARM64_BIN := $(DARWIN_ARM64_DIR)/$(PROJECT_NAME)
 
-.PHONY: all clean build-all build-windows build-linux build-darwin help
+.PHONY: all clean build-all build-windows build-linux build-darwin zip-all zip-windows zip-linux zip-darwin help
 
 # 默认目标：构建所有平台
-all: build-all
+all: zip-all
 
 # 构建所有平台的二进制文件
 build-all: build-windows build-linux build-darwin
@@ -78,6 +86,44 @@ $(DARWIN_ARM64_BIN): $(MAIN_FILE)
 	@GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(BUILD_FLAGS) $(LDFLAGS) -o $@ $(MAIN_FILE)
 	@echo "✓ macOS ARM64 build completed: $@"
 
+# 打包所有平台
+zip-all: zip-windows zip-linux zip-darwin
+	@echo "All zip packages created successfully!"
+
+# 打包 Windows
+zip-windows: $(WINDOWS_AMD64_ZIP)
+
+$(WINDOWS_AMD64_ZIP): $(WINDOWS_AMD64_BIN)
+	@echo "Creating Windows AMD64 zip package..."
+	@cd $(WINDOWS_AMD64_DIR) && zip -9 -j ../$(notdir $@) $(PROJECT_NAME).exe
+	@echo "✓ Windows AMD64 zip package created: $@"
+
+# 打包 Linux
+zip-linux: $(LINUX_AMD64_ZIP) $(LINUX_ARM64_ZIP)
+
+$(LINUX_AMD64_ZIP): $(LINUX_AMD64_BIN)
+	@echo "Creating Linux AMD64 zip package..."
+	@cd $(LINUX_AMD64_DIR) && zip -9 -j ../$(notdir $@) $(PROJECT_NAME)
+	@echo "✓ Linux AMD64 zip package created: $@"
+
+$(LINUX_ARM64_ZIP): $(LINUX_ARM64_BIN)
+	@echo "Creating Linux ARM64 zip package..."
+	@cd $(LINUX_ARM64_DIR) && zip -9 -j ../$(notdir $@) $(PROJECT_NAME)
+	@echo "✓ Linux ARM64 zip package created: $@"
+
+# 打包 macOS
+zip-darwin: $(DARWIN_AMD64_ZIP) $(DARWIN_ARM64_ZIP)
+
+$(DARWIN_AMD64_ZIP): $(DARWIN_AMD64_BIN)
+	@echo "Creating macOS AMD64 zip package..."
+	@cd $(DARWIN_AMD64_DIR) && zip -9 -j ../$(notdir $@) $(PROJECT_NAME)
+	@echo "✓ macOS AMD64 zip package created: $@"
+
+$(DARWIN_ARM64_ZIP): $(DARWIN_ARM64_BIN)
+	@echo "Creating macOS ARM64 zip package..."
+	@cd $(DARWIN_ARM64_DIR) && zip -9 -j ../$(notdir $@) $(PROJECT_NAME)
+	@echo "✓ macOS ARM64 zip package created: $@"
+
 # 清理构建文件
 clean:
 	@echo "Cleaning build files..."
@@ -103,6 +149,10 @@ help:
 	@echo "  build-windows - Build Windows x64 only"
 	@echo "  build-linux  - Build Linux x64 and ARM64"
 	@echo "  build-darwin - Build macOS x64 and ARM64"
+	@echo "  zip-all      - Create zip packages for all platforms"
+	@echo "  zip-windows  - Create zip package for Windows x64"
+	@echo "  zip-linux    - Create zip packages for Linux x64 and ARM64"
+	@echo "  zip-darwin   - Create zip packages for macOS x64 and ARM64"
 	@echo "  clean        - Remove all build files"
 	@echo "  info         - Show build information"
 	@echo "  help         - Show this help message"
@@ -113,3 +163,10 @@ help:
 	@echo "  Linux ARM64:   $(LINUX_ARM64_BIN)"
 	@echo "  macOS AMD64:   $(DARWIN_AMD64_BIN)"
 	@echo "  macOS ARM64:   $(DARWIN_ARM64_BIN)"
+	@echo ""
+	@echo "Zip packages:"
+	@echo "  Windows AMD64: $(WINDOWS_AMD64_ZIP)"
+	@echo "  Linux AMD64:   $(LINUX_AMD64_ZIP)"
+	@echo "  Linux ARM64:   $(LINUX_ARM64_ZIP)"
+	@echo "  macOS AMD64:   $(DARWIN_AMD64_ZIP)"
+	@echo "  macOS ARM64:   $(DARWIN_ARM64_ZIP)"

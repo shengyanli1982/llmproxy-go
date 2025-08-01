@@ -5,7 +5,7 @@ const (
 	// Application metadata - 应用程序元数据
 
 	// DefaultVersion 应用程序默认版本号
-	DefaultVersion = "0.2.0"
+	DefaultVersion = "0.0.0"
 
 	// AppName 应用程序名称
 	AppName = "LLMProxy"
