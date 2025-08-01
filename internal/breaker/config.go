@@ -4,19 +4,20 @@ import (
 	"time"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 	"github.com/sony/gobreaker"
 )
 
 // DefaultSettings 返回默认的熔断器设置
 func DefaultSettings() gobreaker.Settings {
 	return gobreaker.Settings{
-		Name:        "default",
-		MaxRequests: 3,
-		Interval:    10 * time.Second,
-		Timeout:     30 * time.Second,
+		Name:        constants.DefaultBreakerName,
+		MaxRequests: constants.DefaultBreakerMaxRequests,
+		Interval:    time.Duration(constants.DefaultBreakerInterval) * time.Millisecond,
+		Timeout:     time.Duration(constants.DefaultBreakerCooldown) * time.Millisecond,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
 			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
-			return counts.Requests >= 10 && failureRatio >= 0.5
+			return counts.Requests >= constants.DefaultBreakerMinRequests && failureRatio >= constants.DefaultBreakerFailureThreshold
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
 			// 可以在这里添加日志记录
@@ -48,7 +49,7 @@ func CreateFromConfig(name string, config *config.BreakerConfig) gobreaker.Setti
 	if config.Threshold > 0 {
 		settings.ReadyToTrip = func(counts gobreaker.Counts) bool {
 			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
-			return counts.Requests >= 10 && failureRatio >= config.Threshold
+			return counts.Requests >= constants.DefaultBreakerMinRequests && failureRatio >= config.Threshold
 		}
 	}
 

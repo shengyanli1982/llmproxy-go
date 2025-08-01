@@ -11,11 +11,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-logr/logr"
+	"github.com/rs/xid"
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/breaker"
 	"github.com/shengyanli1982/llmproxy-go/internal/client"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 	"github.com/shengyanli1982/llmproxy-go/internal/headers"
 	"github.com/shengyanli1982/llmproxy-go/internal/metrics"
 	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
@@ -231,7 +233,7 @@ func (s *ForwardService) createLoadBalancer(group *config.UpstreamGroupConfig) e
 	if group.Balance != nil {
 		balanceConfig = group.Balance
 	} else {
-		balanceConfig = &config.BalanceConfig{Strategy: "roundrobin"}
+		balanceConfig = &config.BalanceConfig{Strategy: constants.BalanceRoundRobin}
 	}
 
 	lb, err := factory.Create(balanceConfig)
@@ -256,8 +258,8 @@ func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) err
 	} else {
 		// 否则使用默认配置
 		clientConfig = &config.HTTPClientConfig{
-			Agent:     "LLMProxy/1.0",
-			KeepAlive: 60, // 默认60秒
+			Agent:     constants.UserAgent,
+			KeepAlive: constants.DefaultKeepAlive,
 		}
 	}
 
@@ -340,9 +342,9 @@ func (s *ForwardService) ginRateLimitMiddleware() gin.HandlerFunc {
 // handleForward 处理转发请求
 func (s *ForwardService) handleForward(c *gin.Context) {
 	startTime := time.Now()
-	requestID := c.GetHeader("X-Request-ID")
+	requestID := c.GetHeader(constants.HeaderXRequestID)
 	if requestID == "" {
-		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
+		requestID = fmt.Sprintf("req-%s", xid.New().String())
 	}
 
 	// 记录请求接收
@@ -351,7 +353,7 @@ func (s *ForwardService) handleForward(c *gin.Context) {
 		"method", c.Request.Method,
 		"path", c.Request.URL.Path,
 		"client_ip", c.ClientIP(),
-		"user_agent", c.GetHeader("User-Agent"),
+		"user_agent", c.GetHeader(constants.HeaderUserAgent),
 		"content_length", c.Request.ContentLength)
 
 	// 记录请求开始
@@ -370,7 +372,7 @@ func (s *ForwardService) handleForward(c *gin.Context) {
 
 		// 记录错误
 		if s.metricsCollector != nil {
-			s.metricsCollector.RecordError(s.config.Name, "processing_error")
+			s.metricsCollector.RecordError(s.config.Name, constants.ErrorTypeProcessing)
 		}
 
 		s.sendErrorResponse(c, http.StatusInternalServerError, "Internal server error")
@@ -398,7 +400,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time, req
 
 		// 记录上游错误
 		if s.metricsCollector != nil {
-			s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, "unknown", "selection_failed")
+			s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, constants.ErrorTypeUnknown, constants.ErrorTypeSelection)
 		}
 
 		s.sendErrorResponse(c, http.StatusServiceUnavailable, "No available upstream")
@@ -455,7 +457,7 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time, req
 
 		// 记录上游错误
 		if s.metricsCollector != nil {
-			s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "execution_error")
+			s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, constants.ErrorTypeExecution)
 		}
 
 		s.sendErrorResponse(c, http.StatusServiceUnavailable, "Upstream service unavailable")
@@ -532,7 +534,7 @@ func (s *ForwardService) createProxyRequest(originalReq *http.Request) (*http.Re
 		// 确保原始请求体在函数结束时被关闭
 		defer func() {
 			if closeErr := originalReq.Body.Close(); closeErr != nil {
-				s.logger.V(1).Info("Failed to close original request body", "error", closeErr)
+				s.logger.Info("Failed to close original request body", "error", closeErr)
 			}
 		}()
 
@@ -548,14 +550,14 @@ func (s *ForwardService) createProxyRequest(originalReq *http.Request) (*http.Re
 
 		// 检查是否超过大小限制
 		if len(bodyBytes) > MaxRequestBodySize {
-			s.logger.V(1).Info("Request body too large", "size", len(bodyBytes), "limit", MaxRequestBodySize)
+			s.logger.Info("Request body too large", "size", len(bodyBytes), "limit", MaxRequestBodySize)
 			return nil, fmt.Errorf("request body too large: %d bytes (limit: %d bytes)", len(bodyBytes), MaxRequestBodySize)
 		}
 
 		// 创建新的可读取的请求体
 		if len(bodyBytes) > 0 {
 			proxyBody = bytes.NewReader(bodyBytes)
-			s.logger.V(2).Info("Request body copied", "size", len(bodyBytes))
+			s.logger.Info("Request body copied", "size", len(bodyBytes))
 		}
 	}
 
@@ -578,9 +580,9 @@ func (s *ForwardService) createProxyRequest(originalReq *http.Request) (*http.Re
 	}
 
 	// 设置代理相关头部
-	proxyReq.Header.Set("X-Forwarded-For", s.getClientIP(originalReq))
-	proxyReq.Header.Set("X-Forwarded-Proto", s.getScheme(originalReq))
-	proxyReq.Header.Set("X-Forwarded-Host", originalReq.Host)
+	proxyReq.Header.Set(constants.HeaderXForwardedFor, s.getClientIP(originalReq))
+	proxyReq.Header.Set(constants.HeaderXForwardedProto, s.getScheme(originalReq))
+	proxyReq.Header.Set(constants.HeaderXForwardedHost, originalReq.Host)
 
 	return proxyReq, nil
 }
@@ -607,10 +609,10 @@ func (s *ForwardService) forwardResponse(c *gin.Context, resp *http.Response) {
 
 // isStreamingResponse 判断是否为流式响应
 func (s *ForwardService) isStreamingResponse(resp *http.Response) bool {
-	contentType := resp.Header.Get("Content-Type")
-	return strings.Contains(contentType, "text/event-stream") ||
-		strings.Contains(contentType, "application/stream+json") ||
-		resp.Header.Get("Transfer-Encoding") == "chunked"
+	contentType := resp.Header.Get(constants.HeaderContentType)
+	return strings.Contains(contentType, constants.ContentTypeEventStream) ||
+		strings.Contains(contentType, constants.ContentTypeStreamJSON) ||
+		resp.Header.Get(constants.HeaderTransferEncoding) == constants.TransferEncodingChunked
 }
 
 // forwardStreamingResponse 转发流式响应
@@ -686,14 +688,14 @@ func (s *ForwardService) sendErrorResponse(c *gin.Context, statusCode int, messa
 
 // getClientIP 获取客户端IP
 func (s *ForwardService) getClientIP(req *http.Request) string {
-	if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+	if xff := req.Header.Get(constants.HeaderXForwardedFor); xff != "" {
 		if idx := strings.Index(xff, ","); idx >= 0 {
 			return strings.TrimSpace(xff[:idx])
 		}
 		return strings.TrimSpace(xff)
 	}
 
-	if xri := req.Header.Get("X-Real-IP"); xri != "" {
+	if xri := req.Header.Get(constants.HeaderXRealIP); xri != "" {
 		return strings.TrimSpace(xri)
 	}
 
@@ -707,12 +709,12 @@ func (s *ForwardService) getClientIP(req *http.Request) string {
 // getScheme 获取请求协议
 func (s *ForwardService) getScheme(req *http.Request) string {
 	if req.TLS != nil {
-		return "https"
+		return constants.ProtocolHTTPS
 	}
-	if scheme := req.Header.Get("X-Forwarded-Proto"); scheme != "" {
+	if scheme := req.Header.Get(constants.HeaderXForwardedProto); scheme != "" {
 		return scheme
 	}
-	return "http"
+	return constants.ProtocolHTTP
 }
 
 // Run 启动转发服务
@@ -768,20 +770,20 @@ func (s *ForwardService) initializeMetricsCollector() error {
 	globalRegistry := metrics.GetGlobalRegistry()
 
 	// 使用固定名称 "global" 确保所有服务共享同一个收集器
-	const globalCollectorName = "global"
+	const globalCollectorName = constants.MetricsCollectorGlobal
 
 	// 如果收集器已经存在，直接使用
 	if existingCollector, exists := globalRegistry.GetCollector(globalCollectorName); exists {
 		s.metricsCollector = existingCollector
-		s.logger.V(1).Info("Reusing global metrics collector", "service", s.config.Name)
+		s.logger.Info("Reusing global metrics collector", "service", s.config.Name)
 		return nil
 	}
 
 	// 创建全局共享收集器配置
 	config := &metrics.Config{
-		Type:      "prometheus",
+		Type:      constants.MetricsTypePrometheus,
 		Enabled:   true,
-		Namespace: "llmproxy",
+		Namespace: constants.MetricsNamespace,
 		Subsystem: "",
 	}
 

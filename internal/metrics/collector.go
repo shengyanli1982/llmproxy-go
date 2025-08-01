@@ -9,6 +9,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Metrics label constants - 指标标签常量
+const (
+	// Common labels
+	LabelForwardName    = "forward_name"
+	LabelMethod         = "method"
+	LabelPath           = "path"
+	LabelStatusCode     = "status_code"
+	LabelUpstreamGroup  = "upstream_group"
+	LabelUpstreamName   = "upstream_name"
+	LabelErrorType      = "error_type"
+	LabelResult         = "result"
+	LabelFromState      = "from_state"
+	LabelToState        = "to_state"
+	LabelBalancerType   = "balancer_type"
+	LabelLimitType      = "limit_type"
+)
+
 // 预定义常见状态码字符串，避免频繁的格式化操作
 var statusCodeStrings = map[int]string{
 	200: "200", 201: "201", 202: "202", 204: "204",
@@ -96,7 +113,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_http_requests_total",
 			Help: "Total number of HTTP requests",
 		},
-		[]string{"forward_name", "method", "path", "status_code"},
+		[]string{LabelForwardName, LabelMethod, LabelPath, LabelStatusCode},
 	)
 
 	c.httpRequestDuration = prometheus.NewHistogramVec(
@@ -105,7 +122,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Help:    "HTTP request duration in seconds",
 			Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120},
 		},
-		[]string{"forward_name", "method", "path"},
+		[]string{LabelForwardName, LabelMethod, LabelPath},
 	)
 
 	c.httpRequestSizeBytes = prometheus.NewHistogramVec(
@@ -114,7 +131,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Help:    "HTTP request size in bytes",
 			Buckets: prometheus.ExponentialBuckets(100, 10, 8), // 100B to ~100MB
 		},
-		[]string{"forward_name", "method", "path"},
+		[]string{LabelForwardName, LabelMethod, LabelPath},
 	)
 
 	c.httpResponseSizeBytes = prometheus.NewHistogramVec(
@@ -123,7 +140,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Help:    "HTTP response size in bytes",
 			Buckets: prometheus.ExponentialBuckets(100, 10, 8), // 100B to ~100MB
 		},
-		[]string{"forward_name", "method", "path", "status_code"},
+		[]string{LabelForwardName, LabelMethod, LabelPath, LabelStatusCode},
 	)
 
 	// 上游服务指标
@@ -132,7 +149,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_upstream_requests_total",
 			Help: "Total number of upstream requests",
 		},
-		[]string{"upstream_group", "upstream_name", "method", "status_code"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName, LabelMethod, LabelStatusCode},
 	)
 
 	c.upstreamRequestDuration = prometheus.NewHistogramVec(
@@ -141,7 +158,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Help:    "Upstream request duration in seconds",
 			Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120},
 		},
-		[]string{"upstream_group", "upstream_name", "method"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName, LabelMethod},
 	)
 
 	c.upstreamErrorsTotal = prometheus.NewCounterVec(
@@ -149,7 +166,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_upstream_errors_total",
 			Help: "Total number of upstream errors",
 		},
-		[]string{"upstream_group", "upstream_name", "error_type"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName, LabelErrorType},
 	)
 
 	// 断路器指标
@@ -158,7 +175,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_circuit_breaker_state",
 			Help: "Circuit breaker state (0=closed, 1=half-open, 2=open)",
 		},
-		[]string{"upstream_group", "upstream_name"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName},
 	)
 
 	c.circuitBreakerRequestsTotal = prometheus.NewCounterVec(
@@ -166,7 +183,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_circuit_breaker_requests_total",
 			Help: "Total number of circuit breaker requests",
 		},
-		[]string{"upstream_group", "upstream_name", "result"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName, LabelResult},
 	)
 
 	c.circuitBreakerStateChanges = prometheus.NewCounterVec(
@@ -174,7 +191,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_circuit_breaker_state_changes_total",
 			Help: "Total number of circuit breaker state changes",
 		},
-		[]string{"upstream_group", "upstream_name", "from_state", "to_state"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName, LabelFromState, LabelToState},
 	)
 
 	// 负载均衡器指标
@@ -183,7 +200,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_load_balancer_selections_total",
 			Help: "Total number of load balancer selections",
 		},
-		[]string{"upstream_group", "upstream_name", "balancer_type"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName, LabelBalancerType},
 	)
 
 	c.upstreamHealthStatus = prometheus.NewGaugeVec(
@@ -191,7 +208,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_upstream_health_status",
 			Help: "Upstream health status (1=healthy, 0=unhealthy)",
 		},
-		[]string{"upstream_group", "upstream_name"},
+		[]string{LabelUpstreamGroup, LabelUpstreamName},
 	)
 
 	// 系统级指标
@@ -200,7 +217,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_active_connections",
 			Help: "Number of active connections",
 		},
-		[]string{"forward_name"},
+		[]string{LabelForwardName},
 	)
 
 	c.rateLimitRejectionsTotal = prometheus.NewCounterVec(
@@ -208,7 +225,7 @@ func (c *prometheusCollector) initMetrics() error {
 			Name: prefix + "_rate_limit_rejections_total",
 			Help: "Total number of rate limit rejections",
 		},
-		[]string{"forward_name", "limit_type"},
+		[]string{LabelForwardName, LabelLimitType},
 	)
 
 	// 注册所有指标到注册器

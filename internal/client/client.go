@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/rs/xid"
 	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/balance"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
@@ -71,7 +72,7 @@ func NewHTTPClient(cfg *config.HTTPClientConfig) (HTTPClient, error) {
 	}
 
 	return &httpClient{
-		name:           fmt.Sprintf("http-client-%d", time.Now().UnixNano()),
+		name:           fmt.Sprintf("httpclient-%s", xid.New().String()),
 		client:         client,
 		pool:           pool,
 		proxyHandler:   proxyHandler,
@@ -244,8 +245,8 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 	c.logger.Info("Request preparation completed",
 		"upstream", upstream.Name,
 		"final_url", req.URL.String(),
-		"user_agent", req.Header.Get("User-Agent"),
-		"connection", req.Header.Get("Connection"))
+		"user_agent", req.Header.Get(constants.HeaderUserAgent),
+		"connection", req.Header.Get(constants.HeaderConnection))
 
 	return nil
 }

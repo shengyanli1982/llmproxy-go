@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // 认证相关错误定义
@@ -36,11 +38,11 @@ func (a *bearerAuthenticator) Apply(req *http.Request) error {
 	}
 
 	// 设置Authorization头部为Bearer Token格式
-	req.Header.Set("Authorization", "Bearer "+a.token)
+	req.Header.Set(constants.HeaderAuthorization, constants.BearerPrefix+a.token)
 	return nil
 }
 
 // Type 获取认证器类型
 func (a *bearerAuthenticator) Type() string {
-	return "bearer"
+	return constants.AuthTypeBearer
 }

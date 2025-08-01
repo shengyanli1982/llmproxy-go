@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // 工厂相关错误定义
@@ -30,17 +31,17 @@ func (f *authFactory) Create(authConfig *config.AuthConfig) (Authenticator, erro
 	}
 
 	switch authConfig.Type {
-	case "none", "":
+	case constants.AuthTypeNone, "":
 		// 默认使用无认证
 		return NewNoneAuthenticator(), nil
 
-	case "bearer":
+	case constants.AuthTypeBearer:
 		if authConfig.Token == "" {
 			return nil, fmt.Errorf("%w: bearer token is required", ErrInvalidAuthConfig)
 		}
 		return NewBearerAuthenticator(authConfig.Token)
 
-	case "basic":
+	case constants.AuthTypeBasic:
 		if authConfig.Username == "" || authConfig.Password == "" {
 			return nil, fmt.Errorf("%w: username and password are required for basic auth", ErrInvalidAuthConfig)
 		}
