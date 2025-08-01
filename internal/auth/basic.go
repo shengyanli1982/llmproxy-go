@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // Basic认证相关错误定义
@@ -48,11 +50,11 @@ func (a *basicAuthenticator) Apply(req *http.Request) error {
 	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(credentials))
 
 	// 设置Authorization头部为Basic Auth格式
-	req.Header.Set("Authorization", "Basic "+encodedCredentials)
+	req.Header.Set(constants.HeaderAuthorization, constants.BasicPrefix+encodedCredentials)
 	return nil
 }
 
 // Type 获取认证器类型
 func (a *basicAuthenticator) Type() string {
-	return "basic"
+	return constants.AuthTypeBasic
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // Processor 代表HTTP头部处理器，提供便捷的头部操作方法
@@ -63,7 +64,7 @@ func (p *Processor) InsertHeader(req *http.Request, key, value string) error {
 	}
 
 	op := config.HeaderOpConfig{
-		Op:    "insert",
+		Op:    constants.HeaderOpInsert,
 		Key:   key,
 		Value: value,
 	}
@@ -81,7 +82,7 @@ func (p *Processor) ReplaceHeader(req *http.Request, key, value string) error {
 	}
 
 	op := config.HeaderOpConfig{
-		Op:    "replace",
+		Op:    constants.HeaderOpReplace,
 		Key:   key,
 		Value: value,
 	}
@@ -98,7 +99,7 @@ func (p *Processor) RemoveHeader(req *http.Request, key string) error {
 	}
 
 	op := config.HeaderOpConfig{
-		Op:  "remove",
+		Op:  constants.HeaderOpRemove,
 		Key: key,
 	}
 

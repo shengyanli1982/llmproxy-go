@@ -48,3 +48,19 @@ const (
 	// ErrMsgNilBalanceConfig 空负载均衡配置错误消息
 	ErrMsgNilBalanceConfig = "balance config cannot be nil"
 )
+
+const (
+	// Error types for metrics - 指标错误类型
+
+	// ErrorTypeProcessing 处理错误类型
+	ErrorTypeProcessing = "processing_error"
+
+	// ErrorTypeSelection 选择错误类型
+	ErrorTypeSelection = "selection_failed"
+
+	// ErrorTypeExecution 执行错误类型
+	ErrorTypeExecution = "execution_error"
+
+	// ErrorTypeUnknown 未知错误类型
+	ErrorTypeUnknown = "unknown"
+)

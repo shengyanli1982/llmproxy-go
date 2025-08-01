@@ -26,3 +26,16 @@ const (
 	// ExitSuccess 程序正常退出码
 	ExitSuccess = 0
 )
+
+const (
+	// Metrics collector constants - 指标收集器常量
+
+	// MetricsCollectorGlobal 全局指标收集器名称
+	MetricsCollectorGlobal = "global"
+
+	// MetricsTypePrometheus Prometheus指标类型
+	MetricsTypePrometheus = "prometheus"
+
+	// MetricsNamespace 指标命名空间
+	MetricsNamespace = "llmproxy"
+)

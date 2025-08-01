@@ -33,8 +33,26 @@ const (
 	// HeaderXForwardedHost X-Forwarded-Host头部名称
 	HeaderXForwardedHost = "X-Forwarded-Host"
 
+	// HeaderXForwardedFor X-Forwarded-For头部名称
+	HeaderXForwardedFor = "X-Forwarded-For"
+
+	// HeaderXForwardedProto X-Forwarded-Proto头部名称
+	HeaderXForwardedProto = "X-Forwarded-Proto"
+
+	// HeaderXRealIP X-Real-IP头部名称
+	HeaderXRealIP = "X-Real-IP"
+
+	// HeaderXRequestID X-Request-ID头部名称
+	HeaderXRequestID = "X-Request-ID"
+
 	// HeaderAuthorization Authorization头部名称
 	HeaderAuthorization = "Authorization"
+
+	// HeaderContentType Content-Type头部名称
+	HeaderContentType = "Content-Type"
+
+	// HeaderTransferEncoding Transfer-Encoding头部名称
+	HeaderTransferEncoding = "Transfer-Encoding"
 )
 
 const (
@@ -81,4 +99,21 @@ const (
 
 	// HeaderOpRemove 移除头部操作
 	HeaderOpRemove = "remove"
+)
+
+const (
+	// Content types - 内容类型
+
+	// ContentTypeEventStream 服务器发送事件流内容类型
+	ContentTypeEventStream = "text/event-stream"
+
+	// ContentTypeStreamJSON JSON流内容类型
+	ContentTypeStreamJSON = "application/stream+json"
+)
+
+const (
+	// Transfer encodings - 传输编码
+
+	// TransferEncodingChunked 分块传输编码
+	TransferEncodingChunked = "chunked"
 )

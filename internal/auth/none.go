@@ -2,6 +2,8 @@ package auth
 
 import (
 	"net/http"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // noneAuthenticator 代表无认证实现
@@ -21,5 +23,5 @@ func (a *noneAuthenticator) Apply(req *http.Request) error {
 
 // Type 获取认证器类型
 func (a *noneAuthenticator) Type() string {
-	return "none"
+	return constants.AuthTypeNone
 }

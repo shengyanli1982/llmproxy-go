@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // 头部操作相关错误定义
@@ -70,11 +71,11 @@ func (o *defaultOperator) ProcessSingle(headers http.Header, op config.HeaderOpC
 	key := strings.TrimSpace(op.Key)
 
 	switch strings.ToLower(op.Op) {
-	case "insert":
+	case constants.HeaderOpInsert:
 		return o.insertHeader(headers, key, op.Value)
-	case "replace":
+	case constants.HeaderOpReplace:
 		return o.replaceHeader(headers, key, op.Value)
-	case "remove":
+	case constants.HeaderOpRemove:
 		return o.removeHeader(headers, key)
 	default:
 		return errors.New(ErrInvalidOperation.Error() + ": " + op.Op)

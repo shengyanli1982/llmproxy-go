@@ -3,6 +3,8 @@ package ratelimit
 import (
 	"net"
 	"net/http"
+
+	"github.com/shengyanli1982/llmproxy-go/internal/constants"
 )
 
 // IPLimiter IP级别限流器
@@ -35,7 +37,7 @@ func (l *IPLimiter) Reset(ip string) {
 // getClientIP 从HTTP请求中获取客户端真实IP地址
 func (l *IPLimiter) getClientIP(req *http.Request) string {
 	// 优先检查X-Forwarded-For头部
-	if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+	if xff := req.Header.Get(constants.HeaderXForwardedFor); xff != "" {
 		// X-Forwarded-For可能包含多个IP，取第一个
 		if ip := parseFirstIP(xff); ip != "" {
 			return ip
@@ -43,7 +45,7 @@ func (l *IPLimiter) getClientIP(req *http.Request) string {
 	}
 
 	// 检查X-Real-IP头部
-	if xri := req.Header.Get("X-Real-IP"); xri != "" {
+	if xri := req.Header.Get(constants.HeaderXRealIP); xri != "" {
 		if ip := net.ParseIP(xri); ip != nil {
 			return xri
 		}

@@ -121,3 +121,16 @@ const (
 	// DefaultWeight 默认权重
 	DefaultWeight = 1
 )
+
+const (
+	// Circuit breaker defaults - 熔断器默认值
+
+	// DefaultBreakerName 默认熔断器名称
+	DefaultBreakerName = "default"
+
+	// DefaultBreakerMinRequests 默认最小请求数
+	DefaultBreakerMinRequests = 10
+
+	// DefaultBreakerFailureThreshold 默认失败阈值
+	DefaultBreakerFailureThreshold = 0.5
+)

@@ -7,11 +7,15 @@ import (
 
 // 工厂相关错误定义
 var (
-	ErrInvalidMetricsType = errors.New("invalid metrics type")
-	ErrNilConfig          = errors.New("metrics config cannot be nil")
-	ErrInvalidConfig      = errors.New("invalid metrics config")
-	ErrMetricsDisabled    = errors.New("metrics collection is disabled")
+	ErrInvalidMetricsType    = errors.New("invalid metrics type")
+	ErrNilConfig             = errors.New("metrics config cannot be nil")
+	ErrInvalidConfig         = errors.New("invalid metrics config")
+	ErrMetricsDisabled       = errors.New("metrics collection is disabled")
+	ErrMetricsTypeEmpty      = errors.New("metrics type cannot be empty")
+	ErrMetricsNamespaceEmpty = errors.New("metrics namespace cannot be empty")
 )
+
+const NoopType = "noop"
 
 // metricsFactory 代表指标收集器工厂实现
 type metricsFactory struct{}
@@ -39,7 +43,7 @@ func (f *metricsFactory) Create(config *Config) (MetricsCollector, error) {
 	}
 
 	switch config.Type {
-	case "noop", "":
+	case NoopType, "":
 		// 默认使用空操作收集器
 		return NewNoopCollector(), nil
 
@@ -51,11 +55,11 @@ func (f *metricsFactory) Create(config *Config) (MetricsCollector, error) {
 // validateConfig 验证配置的有效性
 func (f *metricsFactory) validateConfig(config *Config) error {
 	if config.Type == "" {
-		return errors.New("metrics type cannot be empty")
+		return ErrMetricsTypeEmpty
 	}
 
 	if config.Namespace == "" {
-		return errors.New("metrics namespace cannot be empty")
+		return ErrMetricsNamespaceEmpty
 	}
 
 	// 验证命名空间格式（只允许字母、数字和下划线）
@@ -86,7 +90,7 @@ func CreateFromDefaults() (MetricsCollector, error) {
 // CreateNoopCollector 创建空操作收集器的便捷方法
 func CreateNoopCollector() (MetricsCollector, error) {
 	config := DefaultConfig()
-	config.Type = "noop"
+	config.Type = NoopType
 
 	factory := NewFactory()
 	return factory.Create(config)
