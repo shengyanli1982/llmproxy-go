@@ -115,15 +115,6 @@ func createTestUpstream(url string) *balance.Upstream {
 	}
 }
 
-// createTestUpstreamWithConfig 创建带配置的测试上游服务
-func createTestUpstreamWithConfig(url string, cfg *config.UpstreamConfig) *balance.Upstream {
-	return &balance.Upstream{
-		Name:   "test-upstream",
-		URL:    url,
-		Config: cfg,
-	}
-}
-
 // createSlowServer 创建慢响应服务器
 func createSlowServer(delay time.Duration) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

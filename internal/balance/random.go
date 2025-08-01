@@ -6,15 +6,15 @@ import (
 	"time"
 )
 
-// randomBalancer 实现随机负载均衡算法
+// RandomBalancer 实现随机负载均衡算法
 // 随机选择上游服务，适用于服务性能相近的场景
-type randomBalancer struct {
+type RandomBalancer struct {
 	seed uint64 // 原子操作的随机种子
 }
 
 // NewRandomBalancer 创建新的随机负载均衡器实例
 func NewRandomBalancer() LoadBalancer {
-	return &randomBalancer{
+	return &RandomBalancer{
 		seed: uint64(time.Now().UnixNano()),
 	}
 }
@@ -22,7 +22,7 @@ func NewRandomBalancer() LoadBalancer {
 // Select 使用随机算法选择上游服务
 // ctx: 上下文信息
 // upstreams: 可用的上游服务列表
-func (b *randomBalancer) Select(ctx context.Context, upstreams []Upstream) (Upstream, error) {
+func (b *RandomBalancer) Select(ctx context.Context, upstreams []Upstream) (Upstream, error) {
 	if upstreams == nil {
 		return Upstream{}, ErrNilUpstreams
 	}
@@ -34,25 +34,25 @@ func (b *randomBalancer) Select(ctx context.Context, upstreams []Upstream) (Upst
 	// 简单的线性同余生成器，适合快速随机选择
 	seed := atomic.AddUint64(&b.seed, 1)
 	index := int(seed % uint64(len(upstreams)))
-	
+
 	return upstreams[index], nil
 }
 
 // UpdateHealth 更新健康状态（随机算法不需要此信息）
 // upstreamName: 上游服务名称
 // healthy: 健康状态
-func (b *randomBalancer) UpdateHealth(upstreamName string, healthy bool) {
+func (b *RandomBalancer) UpdateHealth(upstreamName string, healthy bool) {
 	// 随机算法不需要健康状态信息，此方法为空实现
 }
 
 // UpdateLatency 更新延迟信息（随机算法不需要此信息）
 // upstreamName: 上游服务名称
 // latency: 响应延迟
-func (b *randomBalancer) UpdateLatency(upstreamName string, latency int64) {
+func (b *RandomBalancer) UpdateLatency(upstreamName string, latency int64) {
 	// 随机算法不需要延迟信息，此方法为空实现
 }
 
 // Type 获取负载均衡器类型
-func (b *randomBalancer) Type() string {
+func (b *RandomBalancer) Type() string {
 	return "random"
 }

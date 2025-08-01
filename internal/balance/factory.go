@@ -12,17 +12,17 @@ var (
 	ErrNilBalanceConfig = errors.New("balance config cannot be nil")
 )
 
-// balanceFactory 代表负载均衡器工厂实现
-type balanceFactory struct{}
+// BalanceFactory 代表负载均衡器工厂实现
+type BalanceFactory struct{}
 
 // NewFactory 创建新的负载均衡器工厂实例
 func NewFactory() LoadBalancerFactory {
-	return &balanceFactory{}
+	return &BalanceFactory{}
 }
 
 // Create 根据配置创建对应的负载均衡器
 // config: 负载均衡配置
-func (f *balanceFactory) Create(config *config.BalanceConfig) (LoadBalancer, error) {
+func (f *BalanceFactory) Create(config *config.BalanceConfig) (LoadBalancer, error) {
 	if config == nil {
 		return nil, ErrNilBalanceConfig
 	}
@@ -39,8 +39,8 @@ func (f *balanceFactory) Create(config *config.BalanceConfig) (LoadBalancer, err
 		return NewWeightedRRBalancer(), nil
 	case "random":
 		return NewRandomBalancer(), nil
-	case "failover":
-		return NewFailoverBalancer(), nil
+	case "iphash":
+		return NewIPHashBalancer(), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownStrategy, strategy)
 	}

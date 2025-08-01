@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
-	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,32 +79,88 @@ func TestRandomBalancer(t *testing.T) {
 	assert.True(t, selectedUpstreams["upstream3"])
 }
 
-func TestFailoverBalancer(t *testing.T) {
+
+func TestClientIPContext(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("WithClientIP and GetClientIP", func(t *testing.T) {
+		testIP := "192.168.1.100"
+
+		// 测试存储客户端 IP
+		ctxWithIP := WithClientIP(ctx, testIP)
+		assert.NotNil(t, ctxWithIP)
+
+		// 测试获取客户端 IP
+		retrievedIP, ok := GetClientIP(ctxWithIP)
+		assert.True(t, ok)
+		assert.Equal(t, testIP, retrievedIP)
+	})
+
+	t.Run("GetClientIP from empty context", func(t *testing.T) {
+		// 测试从空 context 获取客户端 IP
+		retrievedIP, ok := GetClientIP(ctx)
+		assert.False(t, ok)
+		assert.Empty(t, retrievedIP)
+	})
+
+	t.Run("WithClientIP empty string", func(t *testing.T) {
+		// 测试存储空字符串
+		ctxWithEmptyIP := WithClientIP(ctx, "")
+		assert.NotNil(t, ctxWithEmptyIP)
+
+		retrievedIP, ok := GetClientIP(ctxWithEmptyIP)
+		assert.True(t, ok)
+		assert.Empty(t, retrievedIP)
+	})
+}
+
+func TestIPHashBalancer(t *testing.T) {
 	upstreams := []Upstream{
 		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
 		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
 		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
 	}
 
-	balancer := NewFailoverBalancer()
-	ctx := context.Background()
+	balancer := NewIPHashBalancer()
+	assert.Equal(t, "iphash", balancer.Type())
 
-	// Initially should select first upstream
-	upstream, err := balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Equal(t, "upstream1", upstream.Name)
+	t.Run("consistent hashing with client IP", func(t *testing.T) {
+		testIP := "192.168.1.100"
+		ctx := WithClientIP(context.Background(), testIP)
 
-	// Mark first upstream as unhealthy
-	if fb, ok := balancer.(*failoverBalancer); ok {
-		fb.mu.Lock()
-		fb.healthMap["upstream1"] = false
-		fb.mu.Unlock()
-	}
+		// 多次选择应该返回相同的上游服务
+		var selectedUpstream string
+		for i := 0; i < 10; i++ {
+			upstream, err := balancer.Select(ctx, upstreams)
+			assert.NoError(t, err)
 
-	// Should now select second upstream
-	upstream, err = balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Equal(t, "upstream2", upstream.Name)
+			if i == 0 {
+				selectedUpstream = upstream.Name
+			} else {
+				assert.Equal(t, selectedUpstream, upstream.Name, "Same IP should always select same upstream")
+			}
+		}
+	})
+
+	t.Run("no client IP fallback to random", func(t *testing.T) {
+		ctx := context.Background() // 没有客户端 IP
+
+		upstream, err := balancer.Select(ctx, upstreams)
+		assert.NoError(t, err)
+		assert.Contains(t, []string{"upstream1", "upstream2", "upstream3"}, upstream.Name)
+	})
+
+	t.Run("UpdateHealth and UpdateLatency are no-op", func(t *testing.T) {
+		// 这些方法应该不会导致 panic 或错误
+		balancer.UpdateHealth("upstream1", false)
+		balancer.UpdateLatency("upstream1", 100)
+
+		// 仍然应该能够正常选择
+		ctx := WithClientIP(context.Background(), "192.168.1.100")
+		upstream, err := balancer.Select(ctx, upstreams)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, upstream.Name)
+	})
 }
 
 func TestFactory_Create(t *testing.T) {
@@ -137,9 +192,9 @@ func TestFactory_Create(t *testing.T) {
 		},
 
 		{
-			name:      "failover",
-			config:    &config.BalanceConfig{Strategy: "failover"},
-			wantType:  "failover",
+			name:      "iphash",
+			config:    &config.BalanceConfig{Strategy: "iphash"},
+			wantType:  "iphash",
 			wantError: false,
 		},
 		{
@@ -177,7 +232,7 @@ func TestEmptyUpstreams(t *testing.T) {
 		NewRRBalancer(),
 		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
-		NewFailoverBalancer(),
+		NewIPHashBalancer(),
 	}
 
 	ctx := context.Background()
@@ -319,7 +374,7 @@ func TestUpdateHealthMethods(t *testing.T) {
 		NewRRBalancer(),
 		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
-		NewFailoverBalancer(),
+		NewIPHashBalancer(),
 	}
 
 	for _, balancer := range balancers {
@@ -336,7 +391,7 @@ func TestUpdateLatencyMethods(t *testing.T) {
 		NewRRBalancer(),
 		NewWeightedRRBalancer(),
 		NewRandomBalancer(),
-		NewFailoverBalancer(),
+		NewIPHashBalancer(),
 	}
 
 	for _, balancer := range balancers {
@@ -348,77 +403,13 @@ func TestUpdateLatencyMethods(t *testing.T) {
 	}
 }
 
-func TestFailoverBalancer_HealthCheck(t *testing.T) {
-	upstreams := []Upstream{
-		{Name: "upstream1", URL: "http://example1.com", Weight: 1},
-		{Name: "upstream2", URL: "http://example2.com", Weight: 1},
-		{Name: "upstream3", URL: "http://example3.com", Weight: 1},
-	}
-
-	balancer := NewFailoverBalancer()
-	ctx := context.Background()
-
-	// Initially should select first upstream
-	upstream, err := balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Equal(t, "upstream1", upstream.Name)
-
-	// Update health for first upstream
-	balancer.UpdateHealth("upstream1", false)
-
-	// Should now select second upstream
-	upstream, err = balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Equal(t, "upstream2", upstream.Name)
-
-	// Mark second as unhealthy too
-	balancer.UpdateHealth("upstream2", false)
-
-	// Should select third upstream
-	upstream, err = balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Equal(t, "upstream3", upstream.Name)
-
-	// Mark all as unhealthy
-	balancer.UpdateHealth("upstream3", false)
-
-	// Should still return first upstream as last resort (failover behavior)
-	upstream, err = balancer.Select(ctx, upstreams)
-	require.NoError(t, err)
-	assert.Equal(t, "upstream1", upstream.Name) // Returns first upstream as fallback
-}
-
-func TestFailoverBalancer_WithBreaker(t *testing.T) {
-	balancer := NewFailoverBalancer()
-
-	// Test implementing LoadBalancerWithBreaker interface
-	if breakerBalancer, ok := balancer.(LoadBalancerWithBreaker); ok {
-		// Test GetBreaker
-		_, exists := breakerBalancer.GetBreaker("upstream1")
-		assert.False(t, exists)
-
-		// Test CreateBreaker
-		settings := gobreaker.Settings{
-			Name: "test-breaker",
-		}
-
-		err := breakerBalancer.CreateBreaker("upstream1", settings)
-		assert.NoError(t, err)
-
-		// Test GetBreaker after creation
-		breaker, exists := breakerBalancer.GetBreaker("upstream1")
-		assert.True(t, exists)
-		assert.NotNil(t, breaker)
-	}
-}
-
 func TestBalancersWithConfigDefaults(t *testing.T) {
 	// Test balancers with config.default.yaml strategy values
 	strategies := []string{
 		"roundrobin",
 		"weighted_roundrobin",
 		"random",
-		"failover",
+		"iphash",
 	}
 
 	factory := NewFactory()

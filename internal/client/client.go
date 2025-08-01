@@ -173,15 +173,9 @@ func (c *httpClient) prepareRequest(req *http.Request, upstream *balance.Upstrea
 	// 注意：当upstream URL是基础URL时，我们不需要修改req.URL.Path、RawQuery、Fragment
 	// 它们保持用户请求的原始值，实现了"基础URL + 用户路径"的拼接机制
 
-	// 应用认证（如果配置中有）
-	if upstream.Config != nil && upstream.Config.Auth != nil {
-		authenticator, err := c.authFactory.Create(upstream.Config.Auth)
-		if err != nil {
-			return fmt.Errorf("failed to create authenticator: %w", err)
-		}
-		if err := authenticator.Apply(req); err != nil {
-			return fmt.Errorf("failed to apply authentication: %w", err)
-		}
+	// 应用认证（使用缓存的认证器）
+	if err := upstream.ApplyAuth(req); err != nil {
+		return fmt.Errorf("failed to apply authentication: %w", err)
 	}
 
 	// 应用头部操作（如果配置中有）

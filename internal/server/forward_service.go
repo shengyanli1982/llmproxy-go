@@ -20,7 +20,6 @@ import (
 	"github.com/shengyanli1982/llmproxy-go/internal/metrics"
 	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
 	"github.com/shengyanli1982/llmproxy-go/internal/response"
-	"github.com/sony/gobreaker"
 )
 
 const (
@@ -60,9 +59,8 @@ type ForwardService struct {
 	metricsCollector metrics.MetricsCollector       // 指标收集器
 
 	// 运行时数据
-	upstreams       []balance.Upstream                // 上游服务列表
-	upstreamMap     map[string]*config.UpstreamConfig // 上游配置映射
-	circuitBreakers map[string]breaker.CircuitBreaker // 熔断器映射
+	upstreams   []balance.Upstream                // 上游服务列表
+	upstreamMap map[string]*config.UpstreamConfig // 上游配置映射
 
 	// 状态控制
 	running bool          // 运行状态
@@ -74,13 +72,12 @@ func NewForwardServices() *ForwardService {
 	logger := logr.Discard() // 临时使用，后续会被重新设置
 
 	return &ForwardService{
-		logger:          &logger,
-		authFactory:     auth.NewFactory(),
-		headerOperator:  headers.NewOperator(),
-		breakerFactory:  breaker.NewFactory(),
-		upstreamMap:     make(map[string]*config.UpstreamConfig),
-		circuitBreakers: make(map[string]breaker.CircuitBreaker),
-		stopCh:          make(chan struct{}),
+		logger:         &logger,
+		authFactory:    auth.NewFactory(),
+		headerOperator: headers.NewOperator(),
+		breakerFactory: breaker.NewFactory(),
+		upstreamMap:    make(map[string]*config.UpstreamConfig),
+		stopCh:         make(chan struct{}),
 	}
 }
 
@@ -129,7 +126,7 @@ func (s *ForwardService) Initialize(cfg *config.ForwardConfig, globalConfig *con
 		return fmt.Errorf("failed to create http client: %w", err)
 	}
 
-	// 初始化熔断器
+	// 初始化负载均衡器熔断器
 	if err := s.initializeCircuitBreakers(); err != nil {
 		return fmt.Errorf("failed to initialize circuit breakers: %w", err)
 	}
@@ -163,11 +160,38 @@ func (s *ForwardService) buildUpstreams(group *config.UpstreamGroupConfig, globa
 			weight = 1 // 默认权重
 		}
 
+		// 创建认证器
+		authenticator, err := auth.CreateFromConfig(upstreamConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create authenticator for %s: %w", upstreamConfig.Name, err)
+		}
+
+		// 创建熔断器
+		var breakerInstance breaker.CircuitBreaker
+		if upstreamConfig.Breaker != nil {
+			settings := breaker.CreateFromConfig(upstreamConfig.Name, upstreamConfig.Breaker)
+			breakerInstance, err = s.breakerFactory.Create(upstreamConfig.Name, settings)
+			if err != nil {
+				return fmt.Errorf("failed to create breaker for %s: %w", upstreamConfig.Name, err)
+			}
+		}
+
+		// 创建限流器
+		var rateLimiterInstance *ratelimit.UpstreamLimiter
+		if upstreamConfig.RateLimit != nil {
+			rateLimiterInstance = ratelimit.NewUpstreamLimiter(
+				float64(upstreamConfig.RateLimit.PerSecond),
+				upstreamConfig.RateLimit.Burst)
+		}
+
 		upstream := balance.Upstream{
-			Name:   upstreamConfig.Name,
-			URL:    upstreamConfig.URL,
-			Weight: weight,
-			Config: upstreamConfig,
+			Name:          upstreamConfig.Name,
+			URL:           upstreamConfig.URL,
+			Weight:        weight,
+			Config:        upstreamConfig,
+			Authenticator: authenticator,
+			Breaker:       breakerInstance,
+			RateLimiter:   rateLimiterInstance,
 		}
 
 		s.upstreams = append(s.upstreams, upstream)
@@ -224,28 +248,19 @@ func (s *ForwardService) createHttpClient(group *config.UpstreamGroupConfig) err
 	return nil
 }
 
-// initializeCircuitBreakers 初始化熔断器
+// initializeCircuitBreakers 初始化负载均衡器中的熔断器
 func (s *ForwardService) initializeCircuitBreakers() error {
 	for _, upstream := range s.upstreams {
-		if upstream.Config.Breaker != nil {
-			settings := breaker.CreateFromConfig(upstream.Name, upstream.Config.Breaker)
-
-			cb, err := s.breakerFactory.Create(upstream.Name, settings)
-			if err != nil {
-				return fmt.Errorf("failed to create circuit breaker for upstream '%s': %w", upstream.Name, err)
-			}
-
-			s.circuitBreakers[upstream.Name] = cb
-
-			// 如果负载均衡器支持熔断器，也要设置
+		if upstream.Breaker != nil {
+			// 如果负载均衡器支持熔断器，设置熔断器
 			if lbWithBreaker, ok := s.loadBalancer.(balance.LoadBalancerWithBreaker); ok {
+				settings := breaker.CreateFromConfig(upstream.Name, upstream.Config.Breaker)
 				if err := lbWithBreaker.CreateBreaker(upstream.Name, settings); err != nil {
 					s.logger.Error(err, "Failed to create breaker in load balancer", "upstream", upstream.Name)
 				}
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -339,41 +354,19 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 	}
 
 	// 2. 检查上游级别的限流
-	if s.rateLimitMW != nil && s.rateLimitMW.IsEnabled() {
-		if !s.rateLimitMW.AllowUpstream(upstream.Name) {
-			s.logger.V(1).Info("Rate limit exceeded for upstream", "upstream", upstream.Name)
+	if !upstream.CheckRateLimit() {
+		s.logger.V(1).Info("Rate limit exceeded for upstream", "upstream", upstream.Name)
 
-			// 记录限流拒绝
-			if s.metricsCollector != nil {
-				s.metricsCollector.RecordRateLimitRejection(s.config.Name, "upstream")
-			}
-
-			s.sendErrorResponse(c, http.StatusTooManyRequests, "Too many requests to upstream service")
-			return fmt.Errorf("rate limit exceeded for upstream: %s", upstream.Name)
-		}
-	}
-
-	// 3. 检查熔断器状态
-	if cb, exists := s.circuitBreakers[upstream.Name]; exists {
-		// 记录断路器状态
+		// 记录限流拒绝
 		if s.metricsCollector != nil {
-			state := int(cb.State())
-			s.metricsCollector.RecordCircuitBreakerState(s.config.DefaultGroup, upstream.Name, state)
+			s.metricsCollector.RecordRateLimitRejection(s.config.Name, "upstream")
 		}
 
-		if cb.State() == gobreaker.StateOpen {
-			// 记录断路器拒绝
-			if s.metricsCollector != nil {
-				s.metricsCollector.RecordCircuitBreakerRequest(s.config.DefaultGroup, upstream.Name, "rejected")
-				s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "circuit_breaker")
-			}
-
-			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Service temporarily unavailable")
-			return fmt.Errorf("circuit breaker is open for upstream: %s", upstream.Name)
-		}
+		s.sendErrorResponse(c, http.StatusTooManyRequests, "Too many requests to upstream service")
+		return fmt.Errorf("rate limit exceeded for upstream: %s", upstream.Name)
 	}
 
-	// 4. 创建请求副本
+	// 3. 创建请求副本
 	proxyReq, err := s.createProxyRequest(req)
 	if err != nil {
 		s.logger.Error(err, "Failed to create proxy request")
@@ -381,44 +374,20 @@ func (s *ForwardService) processRequest(c *gin.Context, startTime time.Time) err
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
-	// 5. 执行请求（通过熔断器保护）
-	var resp *http.Response
-	if cb, exists := s.circuitBreakers[upstream.Name]; exists {
-		result, err := cb.Execute(func() (interface{}, error) {
-			return s.httpClient.Do(proxyReq, &upstream)
-		})
-		if err != nil {
-			s.logger.Error(err, "Circuit breaker execution failed", "upstream", upstream.Name)
+	// 4. 执行请求（通过Upstream封装的熔断器保护）
+	resp, err := upstream.ExecuteWithBreaker(func() (*http.Response, error) {
+		return s.httpClient.Do(proxyReq, &upstream)
+	})
+	if err != nil {
+		s.logger.Error(err, "Request execution failed", "upstream", upstream.Name)
 
-			// 记录断路器失败和上游错误
-			if s.metricsCollector != nil {
-				s.metricsCollector.RecordCircuitBreakerRequest(s.config.DefaultGroup, upstream.Name, "failure")
-				s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "circuit_breaker_failure")
-			}
-
-			s.sendErrorResponse(c, http.StatusServiceUnavailable, "Upstream service unavailable")
-			return fmt.Errorf("circuit breaker execution failed for upstream %s: %w", upstream.Name, err)
-		}
-
-		// 记录断路器成功
+		// 记录上游错误
 		if s.metricsCollector != nil {
-			s.metricsCollector.RecordCircuitBreakerRequest(s.config.DefaultGroup, upstream.Name, "success")
+			s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "execution_error")
 		}
 
-		resp = result.(*http.Response)
-	} else {
-		resp, err = s.httpClient.Do(proxyReq, &upstream)
-		if err != nil {
-			s.logger.Error(err, "HTTP request failed", "upstream", upstream.Name)
-
-			// 记录上游连接错误
-			if s.metricsCollector != nil {
-				s.metricsCollector.RecordUpstreamError(s.config.DefaultGroup, upstream.Name, "connection_error")
-			}
-
-			s.sendErrorResponse(c, http.StatusBadGateway, "Upstream request failed")
-			return fmt.Errorf("HTTP request failed for upstream %s: %w", upstream.Name, err)
-		}
+		s.sendErrorResponse(c, http.StatusServiceUnavailable, "Upstream service unavailable")
+		return fmt.Errorf("request execution failed for upstream %s: %w", upstream.Name, err)
 	}
 
 	defer resp.Body.Close()

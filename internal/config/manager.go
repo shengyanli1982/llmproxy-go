@@ -238,6 +238,20 @@ func (m *Manager) setUpstreamDefaults(config *Config) {
 			if upstream.Breaker.Cooldown == 0 {
 				upstream.Breaker.Cooldown = 30000
 			}
+			if upstream.Breaker.MaxRequests == 0 {
+				upstream.Breaker.MaxRequests = 3
+			}
+			if upstream.Breaker.Interval == 0 {
+				upstream.Breaker.Interval = 10000
+			}
+		}
+		if upstream.RateLimit != nil {
+			if upstream.RateLimit.Burst == 0 {
+				upstream.RateLimit.Burst = 1
+			}
+			if upstream.RateLimit.PerSecond == 0 {
+				upstream.RateLimit.PerSecond = 100
+			}
 		}
 	}
 }

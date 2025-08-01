@@ -42,7 +42,7 @@ func (b *WeightedRRBalancer) Select(ctx context.Context, upstreams []Upstream) (
 
 		// 获取或创建原子权重值
 		weightPtr := b.getOrCreateAtomicWeight(upstream.Name)
-		
+
 		// 原子操作增加当前权重
 		newWeight := atomic.AddInt64(weightPtr, weight)
 
@@ -66,7 +66,7 @@ func (b *WeightedRRBalancer) getOrCreateAtomicWeight(name string) *int64 {
 	if value, ok := b.weights.Load(name); ok {
 		return value.(*int64)
 	}
-	
+
 	// 创建新的原子权重值
 	newWeight := new(int64)
 	actual, _ := b.weights.LoadOrStore(name, newWeight)

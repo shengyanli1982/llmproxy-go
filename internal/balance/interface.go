@@ -3,9 +3,12 @@ package balance
 import (
 	"context"
 	"errors"
+	"net/http"
 
+	"github.com/shengyanli1982/llmproxy-go/internal/auth"
 	"github.com/shengyanli1982/llmproxy-go/internal/breaker"
 	"github.com/shengyanli1982/llmproxy-go/internal/config"
+	"github.com/shengyanli1982/llmproxy-go/internal/ratelimit"
 	"github.com/sony/gobreaker"
 )
 
@@ -30,6 +33,44 @@ type Upstream struct {
 	URL    string                 // 上游服务 URL
 	Weight int                    // 权重（用于加权轮询）
 	Config *config.UpstreamConfig // 上游服务配置
+	
+	// 预初始化的组件实例，避免重复创建
+	Authenticator auth.Authenticator       // 认证器（缓存）
+	Breaker       breaker.CircuitBreaker   // 熔断器
+	RateLimiter   *ratelimit.UpstreamLimiter // 限流器
+}
+
+// ApplyAuth 应用认证到HTTP请求
+// 如果认证器未初始化，则跳过认证（默认行为）
+func (u *Upstream) ApplyAuth(req *http.Request) error {
+	if u.Authenticator != nil {
+		return u.Authenticator.Apply(req)
+	}
+	return nil
+}
+
+// CheckRateLimit 检查是否通过限流检查
+// 如果限流器未初始化，则默认允许通过
+func (u *Upstream) CheckRateLimit() bool {
+	if u.RateLimiter != nil {
+		return u.RateLimiter.Allow(u.Name)
+	}
+	return true
+}
+
+// ExecuteWithBreaker 通过熔断器执行HTTP请求
+// 如果熔断器未初始化，则直接执行请求函数
+func (u *Upstream) ExecuteWithBreaker(fn func() (*http.Response, error)) (*http.Response, error) {
+	if u.Breaker != nil {
+		result, err := u.Breaker.Execute(func() (interface{}, error) {
+			return fn()
+		})
+		if err != nil {
+			return nil, err
+		}
+		return result.(*http.Response), nil
+	}
+	return fn()
 }
 
 // LoadBalancer 代表负载均衡器接口，定义选择上游服务的行为
